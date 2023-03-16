@@ -1,0 +1,11 @@
+[package]
+name = "first_person_shooter"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bevy = "0.10"
+bevy_rapier3d = "0.21"
+bevy_fps_controller = { path="./../bevy_fps_controller" }
