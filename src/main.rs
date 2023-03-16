@@ -7,7 +7,9 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, WindowMode},
 };
+
 use bevy_rapier3d::prelude::*;
+use bevy_kira_audio::prelude::*;
 
 use bevy_fps_controller::controller::*;
 
@@ -28,6 +30,7 @@ fn main() {
         })
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
+        .add_plugin(AudioPlugin)
         // .add_plugin(RapierDebugRenderPlugin::default())
         .add_plugin(FpsControllerPlugin)
         .add_startup_system(setup)
@@ -189,6 +192,8 @@ fn fire_gun(
     gun_query: Query<(Entity, &Gun), With<Gun>>,
     children: Query<&Children>,
     mut query: Query<&mut AnimationPlayer, Without<Gun>>,
+    asset_server: Res<AssetServer>,
+    audio: Res<bevy_kira_audio::Audio>,
 ) {
     for (gun_entity, gun) in gun_query.iter() {
         for child in children.iter_descendants(gun_entity) {
@@ -197,6 +202,7 @@ fn fire_gun(
             };
 
             if input.just_pressed(MouseButton::Left) {
+                audio.play(asset_server.load("gun_shot.ogg")).with_volume(0.5);
                 player
                     .set_speed(2.0)
                     .play_with_transition(gun.fire.clone_weak(), Duration::from_millis(10))

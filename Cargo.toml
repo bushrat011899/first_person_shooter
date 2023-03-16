@@ -9,3 +9,4 @@ edition = "2021"
 bevy = "0.10"
 bevy_rapier3d = "0.21"
 bevy_fps_controller = { path="./../bevy_fps_controller" }
+bevy_kira_audio = "0.15.0"
