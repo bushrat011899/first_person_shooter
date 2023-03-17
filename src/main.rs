@@ -56,6 +56,7 @@ fn main() {
                 map_camera_transform,
                 player::head_bobbing,
                 player::right_hand_bobbing,
+                player::left_hand_bobbing,
             )
                 .chain(),
         )
