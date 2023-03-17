@@ -154,7 +154,7 @@ pub fn head_bobbing(
             y: 1.5,
             z: 0.0,
         };
-        
+
         let head_bob = Vec3 {
             x: 0.0,
             y: 0.02 * velocity.linvel.length(),
@@ -162,5 +162,38 @@ pub fn head_bobbing(
         } * f32::sin(dt * 10.0);
 
         transform.translation = base_translation + head_bob;
+    }
+}
+
+pub fn right_hand_bobbing(
+    time: Res<Time>,
+    torsos: Query<&Velocity, (With<Torso>, Without<RightHand>, Without<Head>)>,
+    heads: Query<&Parent, (Without<Torso>, Without<RightHand>, With<Head>)>,
+    mut hands: Query<(&mut Transform, &Parent), (Without<Torso>, With<RightHand>, Without<Head>)>,
+) {
+    let dt = time.elapsed_seconds();
+
+    for (mut transform, head) in hands.iter_mut() {
+        let Ok(torso) = heads.get(head.get()) else {
+            continue;
+        };
+
+        let Ok(velocity) = torsos.get(torso.get()) else {
+            continue;
+        };
+
+        let base_translation = Vec3 {
+            x: 0.2,
+            y: -0.2,
+            z: -0.5,
+        };
+        
+        let hand_bob = Vec3 {
+            x: 0.0,
+            y: 0.002 * velocity.linvel.length(),
+            z: 0.0,
+        } * f32::sin((1.0 + dt) * 10.0);
+
+        transform.translation = base_translation + hand_bob;
     }
 }
