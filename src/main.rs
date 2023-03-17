@@ -1,4 +1,4 @@
-use std::{f32::consts::TAU, time::Duration};
+use std::time::Duration;
 
 use bevy::{
     gltf::Gltf,
@@ -13,6 +13,8 @@ use bevy_kira_audio::prelude::*;
 
 use bevy_fps_controller::controller::*;
 
+mod player;
+
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
 fn main() {
@@ -23,6 +25,7 @@ fn main() {
         })
         .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
+        .insert_resource(SpacialAudio { max_distance: 25. })
         .insert_resource(SimplePerformance {
             frames: 0.0,
             delta_time: 0.0,
@@ -33,8 +36,14 @@ fn main() {
         .add_plugin(AudioPlugin)
         // .add_plugin(RapierDebugRenderPlugin::default())
         .add_plugin(FpsControllerPlugin)
-        .add_startup_system(setup)
-        .add_systems((manage_cursor, scene_colliders, display_text, respawn, fire_gun))
+        .add_systems((
+            setup.on_startup(),
+            manage_cursor,
+            scene_colliders,
+            display_text,
+            respawn,
+            fire_gun
+        ))
         .run();
 }
 
@@ -47,7 +56,7 @@ fn setup(
 ) {
     let mut window = window.single_mut();
     window.title = String::from("Minimal FPS Controller Example");
-    window.mode = WindowMode::Fullscreen;
+    //window.mode = WindowMode::Fullscreen;
 
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
@@ -59,65 +68,20 @@ fn setup(
         ..default()
     });
 
-    // Note that we have two entities for the player
-    // One is a "logical" player that handles the physics computation and collision
-    // The other is a "render" player that is what is displayed to the user
-    // This distinction is useful for later on if you want to add multiplayer,
-    // where often time these two ideas are not exactly synced up
+    let player_entities = player::spawn_player(&mut commands, 0);
+
     commands
-        .spawn((
-            Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5),
-            Friction {
-                coefficient: 0.0,
-                combine_rule: CoefficientCombineRule::Min,
+        .entity(player_entities.right_hand)
+        .insert((
+            assets.load::<Scene, _>("L1A1_aussie.glb#Scene0"),
+            AudioEmitter {
+                instances: vec![],
             },
-            Restitution {
-                coefficient: 0.0,
-                combine_rule: CoefficientCombineRule::Min,
-            },
-            ActiveEvents::COLLISION_EVENTS,
-            Velocity::zero(),
-            RigidBody::Dynamic,
-            Sleeping::disabled(),
-            LockedAxes::ROTATION_LOCKED,
-            AdditionalMassProperties::Mass(1.0),
-            GravityScale(0.0),
-            Ccd { enabled: true }, // Prevent clipping when going fast
-            FpsControllerBundle {
-                controller: FpsController {
-                    air_acceleration: 80.0,
-                    ..default()
-                },
-                ..default()
-            },
-            TransformBundle::from_transform(Transform::from_translation(SPAWN_POINT)),
-            VisibilityBundle::default(),
-        ))
-        .with_children(|parent| {
-            parent
-                .spawn((
-                        Camera3dBundle {
-                        projection: Projection::Perspective(PerspectiveProjection {
-                            fov: TAU / 5.0,
-                            ..default()
-                        }),
-                        ..default()
-                    },
-                    VisibilityBundle::default(),
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        SceneBundle {
-                            scene: assets.load("L1A1_aussie.glb#Scene0"),
-                            transform: Transform::from_translation(Vec3 { x: 0.2, y: -0.2, z: -0.5 }),
-                            ..Default::default()
-                        },
-                        Gun {
-                            fire: assets.load("L1A1_aussie.glb#Animation0"),
-                        },
-                    ));
-                });
-        });
+            Gun {
+                fire_animation: assets.load("L1A1_aussie.glb#Animation0"),
+                fire_sound: assets.load("gun_shot.ogg"),
+            }
+        ));
 
     commands.insert_resource(MainScene {
         handle: assets.load("playground.glb"),
@@ -184,28 +148,29 @@ impl SimplePerformance {
 
 #[derive(Component)]
 struct Gun {
-    fire: Handle<AnimationClip>
+    fire_animation: Handle<AnimationClip>,
+    fire_sound: Handle<bevy_kira_audio::AudioSource>,
 }
 
 fn fire_gun(
     input: Res<Input<MouseButton>>,
-    gun_query: Query<(Entity, &Gun), With<Gun>>,
+    mut gun_query: Query<(Entity, &Gun, &mut AudioEmitter), With<Gun>>,
     children: Query<&Children>,
     mut query: Query<&mut AnimationPlayer, Without<Gun>>,
-    asset_server: Res<AssetServer>,
     audio: Res<bevy_kira_audio::Audio>,
 ) {
-    for (gun_entity, gun) in gun_query.iter() {
+    for (gun_entity, gun, mut audio_emitter) in gun_query.iter_mut() {
         for child in children.iter_descendants(gun_entity) {
             let Ok(mut player) = query.get_mut(child) else {
                 continue;
             };
 
             if input.just_pressed(MouseButton::Left) {
-                audio.play(asset_server.load("gun_shot.ogg")).with_volume(0.5);
+                audio_emitter.instances.push(audio.play(gun.fire_sound.clone_weak()).handle());
+
                 player
                     .set_speed(2.0)
-                    .play_with_transition(gun.fire.clone_weak(), Duration::from_millis(10))
+                    .play_with_transition(gun.fire_animation.clone_weak(), Duration::from_millis(10))
                     .set_elapsed(0.0);
             }
         }
