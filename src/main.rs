@@ -69,10 +69,32 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     assets: Res<AssetServer>,
+    audio: Res<bevy_kira_audio::Audio>,
 ) {
     let mut window = window.single_mut();
     window.title = String::from("Minimal FPS Controller Example");
     //window.mode = WindowMode::Fullscreen;
+
+    let cube_handle = meshes.add(Mesh::from(shape::Cube { size: 1.0 }));
+    let cube_material_handle = materials.add(StandardMaterial {
+        base_color: Color::rgb(0.8, 0.7, 0.6),
+        ..default()
+    });
+
+    commands
+        .spawn((
+            PbrBundle {
+                mesh: cube_handle.clone(),
+                material: cube_material_handle.clone(),
+                transform: Transform::from_xyz(5.0, 2.0, 1.0),
+                ..default()
+            },
+            AudioEmitter {
+                instances: vec![
+                    audio.play(assets.load("e1m1_cover.ogg")).looped().handle()
+                ]
+            },
+        ));
 
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
