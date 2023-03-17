@@ -8,8 +8,8 @@ use bevy::{
     window::{CursorGrabMode, WindowMode},
 };
 
-use bevy_rapier3d::prelude::*;
 use bevy_kira_audio::prelude::*;
+use bevy_rapier3d::prelude::*;
 
 use bevy_fps_controller::controller::*;
 
@@ -29,21 +29,35 @@ fn main() {
         .insert_resource(SimplePerformance {
             frames: 0.0,
             delta_time: 0.0,
-            frame_time: f32::INFINITY
+            frame_time: f32::INFINITY,
         })
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugin(AudioPlugin)
         // .add_plugin(RapierDebugRenderPlugin::default())
-        .add_plugin(FpsControllerPlugin)
+        // .add_plugin(FpsControllerPlugin)
         .add_systems((
             setup.on_startup(),
             manage_cursor,
             scene_colliders,
             display_text,
             respawn,
-            fire_gun
+            fire_gun,
         ))
+        .add_systems(
+            (
+                // Handle Player Inputs
+                keyboard_and_mouse_input,
+                choose_movement_mode,
+                // Update the Controller
+                map_input_orientation,
+                map_input_movement,
+                // Update the Camera
+                map_camera_transform,
+                player::head_bobbing,
+            )
+                .chain(),
+        )
         .run();
 }
 
@@ -70,18 +84,14 @@ fn setup(
 
     let player_entities = player::spawn_player(&mut commands, 0);
 
-    commands
-        .entity(player_entities.right_hand)
-        .insert((
-            assets.load::<Scene, _>("L1A1_aussie.glb#Scene0"),
-            AudioEmitter {
-                instances: vec![],
-            },
-            Gun {
-                fire_animation: assets.load("L1A1_aussie.glb#Animation0"),
-                fire_sound: assets.load("gun_shot.ogg"),
-            }
-        ));
+    commands.entity(player_entities.right_hand).insert((
+        assets.load::<Scene, _>("L1A1_aussie.glb#Scene0"),
+        AudioEmitter { instances: vec![] },
+        Gun {
+            fire_animation: assets.load("L1A1_aussie.glb#Animation0"),
+            fire_sound: assets.load("gun_shot.ogg"),
+        },
+    ));
 
     commands.insert_resource(MainScene {
         handle: assets.load("playground.glb"),
@@ -130,7 +140,7 @@ struct MainScene {
 struct SimplePerformance {
     frames: f32,
     delta_time: f32,
-    frame_time: f32
+    frame_time: f32,
 }
 
 impl SimplePerformance {
@@ -166,11 +176,16 @@ fn fire_gun(
             };
 
             if input.just_pressed(MouseButton::Left) {
-                audio_emitter.instances.push(audio.play(gun.fire_sound.clone_weak()).handle());
+                audio_emitter
+                    .instances
+                    .push(audio.play(gun.fire_sound.clone_weak()).handle());
 
                 player
                     .set_speed(2.0)
-                    .play_with_transition(gun.fire_animation.clone_weak(), Duration::from_millis(10))
+                    .play_with_transition(
+                        gun.fire_animation.clone_weak(),
+                        Duration::from_millis(10),
+                    )
                     .set_elapsed(0.0);
             }
         }
