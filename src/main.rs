@@ -8,17 +8,27 @@ use bevy::{
     window::{CursorGrabMode, WindowMode},
 };
 
+use bevy_embedded_assets::EmbeddedAssetPlugin;
+use bevy_fps_controller::controller::*;
 use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
+use main_menu::MainMenuPlugin;
 
-use bevy_fps_controller::controller::*;
-
+mod main_menu;
 mod player;
 
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
+#[derive(States, Debug, Clone, Eq, PartialEq, Hash, Default)]
+enum AppState {
+    #[default]
+    MainMenu,
+    InGame,
+}
+
 fn main() {
     App::new()
+        .add_state::<AppState>()
         .insert_resource(AmbientLight {
             color: Color::WHITE,
             brightness: 0.5,
@@ -26,76 +36,74 @@ fn main() {
         .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
         .insert_resource(SpacialAudio { max_distance: 25. })
-        .insert_resource(SimplePerformance {
-            frames: 0.0,
-            delta_time: 0.0,
-            frame_time: f32::INFINITY,
-        })
-        .add_plugins(DefaultPlugins)
+        .add_plugins(
+            DefaultPlugins
+                .build()
+                .add_before::<bevy::asset::AssetPlugin, _>(EmbeddedAssetPlugin),
+        )
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugin(AudioPlugin)
-        // .add_plugin(RapierDebugRenderPlugin::default())
-        // .add_plugin(FpsControllerPlugin)
-        .add_systems((
-            setup.on_startup(),
-            manage_cursor,
-            scene_colliders,
-            display_text,
-            respawn,
-            fire_gun,
-        ))
+        .add_plugin(MainMenuPlugin)
+        .add_system(setup_window.on_startup())
+        .add_system(load_level.in_schedule(OnEnter(AppState::InGame)))
         .add_systems(
             (
-                // Handle Player Inputs
+                manage_cursor,
+                scene_colliders,
+                display_text,
+                respawn,
+                fire_gun,
+                fire_gun_and_check_for_hits,
                 keyboard_and_mouse_input,
                 choose_movement_mode,
-                // Update the Controller
                 map_input_orientation,
                 map_input_movement,
-                // Update the Camera
                 map_camera_transform,
                 player::head_bobbing,
                 player::right_hand_bobbing,
                 player::left_hand_bobbing,
             )
-                .chain(),
+                .chain()
+                .in_set(OnUpdate(AppState::InGame)),
         )
         .run();
 }
 
-fn setup(
+/// Setup the main window during application launch.
+fn setup_window(mut window: Query<&mut Window>) {
+    let mut window = window.single_mut();
+    window.title = String::from("Minimal FPS Controller Example");
+    //window.mode = WindowMode::Fullscreen;
+}
+
+fn load_level(
     mut commands: Commands,
-    mut window: Query<&mut Window>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     assets: Res<AssetServer>,
     audio: Res<bevy_kira_audio::Audio>,
 ) {
-    let mut window = window.single_mut();
-    window.title = String::from("Minimal FPS Controller Example");
-    //window.mode = WindowMode::Fullscreen;
-
+    // Spawn a cube that plays music
     let cube_handle = meshes.add(Mesh::from(shape::Cube { size: 1.0 }));
     let cube_material_handle = materials.add(StandardMaterial {
         base_color: Color::rgb(0.8, 0.7, 0.6),
         ..default()
     });
 
-    commands
-        .spawn((
-            PbrBundle {
-                mesh: cube_handle.clone(),
-                material: cube_material_handle.clone(),
-                transform: Transform::from_xyz(5.0, 2.0, 1.0),
-                ..default()
-            },
-            AudioEmitter {
-                instances: vec![
-                    audio.play(assets.load("e1m1_cover.ogg")).looped().handle()
-                ]
-            },
-        ));
+    commands.spawn((
+        PbrBundle {
+            mesh: cube_handle.clone(),
+            material: cube_material_handle.clone(),
+            transform: Transform::from_xyz(5.0, 2.0, 1.0),
+            ..default()
+        },
+        AudioEmitter {
+            instances: vec![audio.play(assets.load("e1m1_cover.ogg")).looped().handle()],
+        },
+        Collider::cuboid(0.5, 0.5, 0.5),
+    ));
 
+    // Create a directional light for the environment
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
             illuminance: 6000.0,
@@ -106,7 +114,19 @@ fn setup(
         ..default()
     });
 
+    // Spawn the player
     let player_entities = player::spawn_player(&mut commands, 0);
+
+    let player_handle = meshes.add(Mesh::from(shape::Capsule { radius: 0.5, rings: 8, depth: 1.0, latitudes: 8, longitudes: 8, uv_profile: default() }));
+    let player_material_handle = materials.add(StandardMaterial {
+        base_color: Color::rgb(0.3, 0.8, 0.3),
+        ..default()
+    });
+
+    commands.entity(player_entities.torso).insert((
+        player_handle,
+        player_material_handle
+    ));
 
     commands.entity(player_entities.right_hand).insert((
         assets.load::<Scene, _>("L1A1_aussie.glb#Scene0"),
@@ -117,11 +137,13 @@ fn setup(
         },
     ));
 
+    // Load the scene
     commands.insert_resource(MainScene {
         handle: assets.load("playground.glb"),
         is_loaded: false,
     });
 
+    // Debug UI
     commands.spawn(
         TextBundle::from_section(
             "",
@@ -165,6 +187,16 @@ struct SimplePerformance {
     frames: f32,
     delta_time: f32,
     frame_time: f32,
+}
+
+impl Default for SimplePerformance {
+    fn default() -> Self {
+        Self {
+            frames: 0.0,
+            delta_time: 0.0,
+            frame_time: f32::INFINITY,
+        }
+    }
 }
 
 impl SimplePerformance {
@@ -213,6 +245,57 @@ fn fire_gun(
                     .set_elapsed(0.0);
             }
         }
+    }
+}
+
+fn fire_gun_and_check_for_hits(
+    heads: Query<&GlobalTransform, With<player::Head>>,
+    rapier_context: Res<RapierContext>,
+    input: Res<Input<MouseButton>>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if !input.just_pressed(MouseButton::Left) {
+        return;
+    }
+
+    for head in heads.iter() {
+        let ray_dir = head.forward();
+        let ray_pos = head.translation() + 2.0 * ray_dir;
+        let max_toi = f32::INFINITY;
+        let solid = true;
+        let filter = QueryFilter::new();
+
+        let Some((entity, toi)) = rapier_context.cast_ray(
+            ray_pos, ray_dir, max_toi, solid, filter
+        ) else {
+            continue;
+        };
+
+        let hit_point = ray_pos + ray_dir * toi;
+        println!("Entity {:?} hit at point {}", entity, hit_point);
+
+        // Spawn sphere to represent the hit point
+        let hit_handle = meshes.add(Mesh::from(shape::UVSphere {
+            radius: 0.1,
+            sectors: 4,
+            stacks: 4,
+        }));
+        let hit_material_handle = materials.add(StandardMaterial {
+            base_color: Color::rgb(0.1, 0.1, 0.1),
+            ..default()
+        });
+
+        commands.spawn((
+            PbrBundle {
+                mesh: hit_handle.clone(),
+                material: hit_material_handle.clone(),
+                transform: Transform::from_translation(hit_point),
+                ..default()
+            },
+            Collider::ball(0.1),
+        ));
     }
 }
 
@@ -280,9 +363,9 @@ fn manage_cursor(
 
 fn display_text(
     time: Res<Time>,
-    mut perf: ResMut<SimplePerformance>,
     mut controller_query: Query<(&Transform, &Velocity)>,
     mut text_query: Query<&mut Text>,
+    mut perf: Local<SimplePerformance>,
 ) {
     let dt = time.delta_seconds();
 

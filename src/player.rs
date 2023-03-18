@@ -187,7 +187,7 @@ pub fn right_hand_bobbing(
             y: -0.2,
             z: -0.5,
         };
-        
+
         let hand_bob = Vec3 {
             x: 0.0,
             y: 0.002 * velocity.linvel.length(),
@@ -220,7 +220,7 @@ pub fn left_hand_bobbing(
             y: -0.2,
             z: -0.5,
         };
-        
+
         let hand_bob = Vec3 {
             x: 0.0,
             y: 0.002 * velocity.linvel.length(),
