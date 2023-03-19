@@ -14,7 +14,7 @@ use bevy_rapier3d::prelude::*;
 
 use firearm::{Fire, FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, Fired};
 use main_menu::MainMenuPlugin;
-use sparks::{setup_sparks_particles, BulletImpactEffect, SmokeCloudEffect, setup_smoke_particles};
+use sparks::{setup_smoke_particles, setup_sparks_particles, BulletImpactEffect, SmokeCloudEffect};
 
 mod firearm;
 mod main_menu;
@@ -71,6 +71,11 @@ fn main() {
                 player::right_hand_bobbing,
                 player::left_hand_bobbing,
             )
+                .chain()
+                .in_set(OnUpdate(AppState::InGame)),
+        )
+        .add_systems(
+            (clear_fog_over_time, increase_fog_after_shots)
                 .chain()
                 .in_set(OnUpdate(AppState::InGame)),
         )
@@ -135,6 +140,12 @@ fn load_level(
     }));
     let player_material_handle = materials.add(StandardMaterial {
         base_color: Color::rgb(0.3, 0.8, 0.3),
+        ..default()
+    });
+
+    commands.entity(player_entities.head).insert(FogSettings {
+        color: Color::rgba(0.1, 0.1, 0.1, 1.0),
+        falloff: FogFalloff::Exponential { density: 0.1 },
         ..default()
     });
 
@@ -248,6 +259,45 @@ fn input_handler(
     }
 }
 
+fn increase_fog_after_shots(
+    mut fired_events: EventReader<FirearmEvent<Fired>>,
+    mut query: Query<&mut FogSettings, With<player::Head>>,
+) {
+    let fog_steps = fired_events.iter().count();
+
+    if !(fog_steps > 0) {
+        return;
+    };
+
+    println!("{fog_steps}");
+
+    for mut settings in query.iter_mut() {
+        let density = match settings.falloff {
+            FogFalloff::Exponential { density } => density,
+            _ => 0.1,
+        };
+
+        let density = density * 1.2_f32.powf(fog_steps as f32);
+
+        settings.falloff = FogFalloff::Exponential { density };
+    }
+}
+
+fn clear_fog_over_time(time: Res<Time>, mut query: Query<&mut FogSettings, With<player::Head>>) {
+    let dt = time.delta_seconds();
+
+    for mut settings in query.iter_mut() {
+        let density = match settings.falloff {
+            FogFalloff::Exponential { density } => density,
+            _ => 0.1,
+        };
+
+        let density = if density < 0.1 { 0.1 } else { density - 0.01 * dt };
+
+        settings.falloff = FogFalloff::Exponential { density };
+    }
+}
+
 fn check_for_bullet_collisions(
     mut fired_events: EventReader<FirearmEvent<Fired>>,
     hands: Query<&Parent, With<player::RightHand>>,
@@ -274,13 +324,11 @@ fn check_for_bullet_collisions(
         let solid = true;
         let filter = QueryFilter::new();
 
-        commands.spawn(
-            ParticleEffectBundle {
-                effect: ParticleEffect::new(smoke_effect.effect.clone_weak()),
-                transform: Transform::from_translation(ray_pos),
-                ..default()
-            }
-        );
+        commands.spawn(ParticleEffectBundle {
+            effect: ParticleEffect::new(smoke_effect.effect.clone_weak()),
+            transform: Transform::from_translation(ray_pos),
+            ..default()
+        });
 
         let Some((entity, toi)) = rapier_context.cast_ray(
             ray_pos, ray_dir, max_toi, solid, filter
