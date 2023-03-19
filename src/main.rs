@@ -10,13 +10,16 @@ use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_fps_controller::controller::*;
 use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
+use bevy_hanabi::prelude::*;
 
 use firearm::{FirearmBundle, FirearmActions, FirearmAction, FirearmEvent, Fire, Fired};
 use main_menu::MainMenuPlugin;
+use sparks::{BulletImpactEffect, setup_sparks_particles};
 
 mod main_menu;
 mod player;
 mod firearm;
+mod sparks;
 
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
@@ -47,7 +50,8 @@ fn main() {
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugin(AudioPlugin)
         .add_plugin(MainMenuPlugin)
-        .add_system(setup_window.on_startup())
+        .add_plugin(HanabiPlugin)
+        .add_systems((setup_window, setup_sparks_particles).on_startup())
         .add_system(load_level.in_schedule(OnEnter(AppState::InGame)))
         .add_systems(
             (
@@ -243,6 +247,7 @@ fn check_for_bullet_collisions(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    effect: Res<BulletImpactEffect>
 ) {
     for fired_event in fired_events.iter() {
         let Ok(parent) = hands.get(fired_event.entity) else {
@@ -287,6 +292,7 @@ fn check_for_bullet_collisions(
                 ..default()
             },
             Collider::ball(0.1),
+            ParticleEffect::new(effect.effect.clone_weak()),
         ));
     }
 }
