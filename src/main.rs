@@ -16,6 +16,7 @@ use main_menu::MainMenuPlugin;
 
 mod main_menu;
 mod player;
+mod firearm;
 
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
@@ -72,7 +73,7 @@ fn main() {
 /// Setup the main window during application launch.
 fn setup_window(mut window: Query<&mut Window>) {
     let mut window = window.single_mut();
-    window.title = String::from("Minimal FPS Controller Example");
+    window.title = String::from("Muskrats at Dawn");
     //window.mode = WindowMode::Fullscreen;
 }
 
@@ -129,10 +130,10 @@ fn load_level(
     ));
 
     commands.entity(player_entities.right_hand).insert((
-        assets.load::<Scene, _>("L1A1_aussie.glb#Scene0"),
+        assets.load::<Scene, _>("musket.glb#Scene0"),
         AudioEmitter { instances: vec![] },
         Gun {
-            fire_animation: assets.load("L1A1_aussie.glb#Animation0"),
+            fire_animation: assets.load("musket.glb#Animation0"),
             fire_sound: assets.load("gun_shot.ogg"),
         },
     ));
