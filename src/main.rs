@@ -8,17 +8,17 @@ use bevy::{
 
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_fps_controller::controller::*;
+use bevy_hanabi::prelude::*;
 use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
-use bevy_hanabi::prelude::*;
 
-use firearm::{FirearmBundle, FirearmActions, FirearmAction, FirearmEvent, Fire, Fired};
+use firearm::{Fire, FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, Fired};
 use main_menu::MainMenuPlugin;
-use sparks::{BulletImpactEffect, setup_sparks_particles};
+use sparks::{setup_sparks_particles, BulletImpactEffect, SmokeCloudEffect, setup_smoke_particles};
 
+mod firearm;
 mod main_menu;
 mod player;
-mod firearm;
 mod sparks;
 
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
@@ -51,7 +51,7 @@ fn main() {
         .add_plugin(AudioPlugin)
         .add_plugin(MainMenuPlugin)
         .add_plugin(HanabiPlugin)
-        .add_systems((setup_window, setup_sparks_particles).on_startup())
+        .add_systems((setup_window, setup_sparks_particles, setup_smoke_particles).on_startup())
         .add_system(load_level.in_schedule(OnEnter(AppState::InGame)))
         .add_systems(
             (
@@ -125,19 +125,26 @@ fn load_level(
     // Spawn the player
     let player_entities = player::spawn_player(&mut commands, 0);
 
-    let player_handle = meshes.add(Mesh::from(shape::Capsule { radius: 0.5, rings: 8, depth: 1.0, latitudes: 8, longitudes: 8, uv_profile: default() }));
+    let player_handle = meshes.add(Mesh::from(shape::Capsule {
+        radius: 0.5,
+        rings: 8,
+        depth: 1.0,
+        latitudes: 8,
+        longitudes: 8,
+        uv_profile: default(),
+    }));
     let player_material_handle = materials.add(StandardMaterial {
         base_color: Color::rgb(0.3, 0.8, 0.3),
         ..default()
     });
 
-    commands.entity(player_entities.torso).insert((
-        player_handle,
-        player_material_handle
-    ));
+    commands
+        .entity(player_entities.torso)
+        .insert((player_handle, player_material_handle));
 
-    commands.entity(player_entities.right_hand).insert((
-        FirearmBundle {
+    commands
+        .entity(player_entities.right_hand)
+        .insert((FirearmBundle {
             model: assets.load("musket.glb#Scene0"),
             actions: FirearmActions {
                 fire: FirearmAction {
@@ -147,8 +154,7 @@ fn load_level(
                 },
             },
             audio_emitter: AudioEmitter { instances: vec![] },
-        },
-    ));
+        },));
 
     // Load the scene
     commands.insert_resource(MainScene {
@@ -235,7 +241,10 @@ fn input_handler(
     }
 
     for entity in hands.iter() {
-        fire_events.send(firearm::FirearmEvent { details: firearm::Fire, entity });
+        fire_events.send(firearm::FirearmEvent {
+            details: firearm::Fire,
+            entity,
+        });
     }
 }
 
@@ -247,7 +256,8 @@ fn check_for_bullet_collisions(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    effect: Res<BulletImpactEffect>
+    impact_effect: Res<BulletImpactEffect>,
+    smoke_effect: Res<SmokeCloudEffect>,
 ) {
     for fired_event in fired_events.iter() {
         let Ok(parent) = hands.get(fired_event.entity) else {
@@ -264,6 +274,14 @@ fn check_for_bullet_collisions(
         let solid = true;
         let filter = QueryFilter::new();
 
+        commands.spawn(
+            ParticleEffectBundle {
+                effect: ParticleEffect::new(smoke_effect.effect.clone_weak()),
+                transform: Transform::from_translation(ray_pos),
+                ..default()
+            }
+        );
+
         let Some((entity, toi)) = rapier_context.cast_ray(
             ray_pos, ray_dir, max_toi, solid, filter
         ) else {
@@ -279,6 +297,7 @@ fn check_for_bullet_collisions(
             sectors: 4,
             stacks: 4,
         }));
+
         let hit_material_handle = materials.add(StandardMaterial {
             base_color: Color::rgb(0.1, 0.1, 0.1),
             ..default()
@@ -291,8 +310,8 @@ fn check_for_bullet_collisions(
                 transform: Transform::from_translation(hit_point),
                 ..default()
             },
-            Collider::ball(0.1),
-            ParticleEffect::new(effect.effect.clone_weak()),
+            Collider::ball(0.01),
+            ParticleEffect::new(impact_effect.effect.clone_weak()),
         ));
     }
 }

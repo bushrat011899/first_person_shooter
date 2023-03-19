@@ -1,6 +1,12 @@
 use std::time::Duration;
 
-use bevy::{prelude::{HierarchyQueryExt, AnimationPlayer, Children, Res, Without, With, Query, EventReader, Bundle, Component, Handle, AnimationClip, Scene, Entity, EventWriter, Commands}, time::Time};
+use bevy::{
+    prelude::{
+        AnimationClip, AnimationPlayer, Bundle, Children, Commands, Component, Entity, EventReader,
+        EventWriter, Handle, HierarchyQueryExt, Query, Res, Scene, With, Without,
+    },
+    time::Time,
+};
 use bevy_kira_audio::prelude::{Audio, AudioControl, AudioEmitter, AudioSource};
 
 pub struct Fire;
@@ -9,7 +15,7 @@ pub struct Fired;
 
 pub struct FirearmEvent<EventType> {
     pub details: EventType,
-    pub entity: Entity
+    pub entity: Entity,
 }
 
 pub struct FirearmAction {
@@ -20,26 +26,33 @@ pub struct FirearmAction {
 
 #[derive(Component)]
 pub struct FirearmLastFired {
-    pub elapsed_time_seconds: f32
+    pub elapsed_time_seconds: f32,
 }
 
 #[derive(Component)]
 pub struct FirearmActions {
-    pub fire: FirearmAction
+    pub fire: FirearmAction,
 }
 
 #[derive(Bundle)]
 pub struct FirearmBundle {
     pub model: Handle<Scene>,
     pub actions: FirearmActions,
-    pub audio_emitter: AudioEmitter
+    pub audio_emitter: AudioEmitter,
 }
 
 pub fn fire_firearms(
     mut commands: Commands,
     mut fire_events: EventReader<FirearmEvent<Fire>>,
     mut fired_events: EventWriter<FirearmEvent<Fired>>,
-    mut gun_query: Query<(&FirearmActions, &mut AudioEmitter, Option<&mut FirearmLastFired>), With<FirearmActions>>,
+    mut gun_query: Query<
+        (
+            &FirearmActions,
+            &mut AudioEmitter,
+            Option<&mut FirearmLastFired>,
+        ),
+        With<FirearmActions>,
+    >,
     children: Query<&Children>,
     mut query: Query<&mut AnimationPlayer, Without<FirearmActions>>,
     audio: Res<Audio>,
@@ -60,10 +73,12 @@ pub fn fire_firearms(
                 }
 
                 last_fired.elapsed_time_seconds = current_time;
-            },
+            }
             None => {
-                commands.entity(fire_event.entity).insert(FirearmLastFired { elapsed_time_seconds: current_time });
-            },
+                commands.entity(fire_event.entity).insert(FirearmLastFired {
+                    elapsed_time_seconds: current_time,
+                });
+            }
         };
 
         audio_emitter
@@ -82,10 +97,13 @@ pub fn fire_firearms(
                     Duration::from_millis(10),
                 )
                 .set_elapsed(0.0);
-            
+
             break;
         }
 
-        fired_events.send(FirearmEvent { details: Fired, entity: fire_event.entity });
+        fired_events.send(FirearmEvent {
+            details: Fired,
+            entity: fire_event.entity,
+        });
     }
 }
