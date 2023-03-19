@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use bevy::{
     gltf::Gltf,
     gltf::{GltfMesh, GltfNode},
@@ -12,6 +10,8 @@ use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_fps_controller::controller::*;
 use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
+
+use firearm::{FirearmBundle, FirearmActions, FirearmAction, FirearmEvent, Fire, Fired};
 use main_menu::MainMenuPlugin;
 
 mod main_menu;
@@ -37,6 +37,8 @@ fn main() {
         .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
         .insert_resource(SpacialAudio { max_distance: 25. })
+        .add_event::<FirearmEvent<Fire>>()
+        .add_event::<FirearmEvent<Fired>>()
         .add_plugins(
             DefaultPlugins
                 .build()
@@ -53,8 +55,9 @@ fn main() {
                 scene_colliders,
                 display_text,
                 respawn,
-                fire_gun,
-                fire_gun_and_check_for_hits,
+                input_handler,
+                firearm::fire_firearms,
+                check_for_bullet_collisions,
                 keyboard_and_mouse_input,
                 choose_movement_mode,
                 map_input_orientation,
@@ -130,11 +133,16 @@ fn load_level(
     ));
 
     commands.entity(player_entities.right_hand).insert((
-        assets.load::<Scene, _>("musket.glb#Scene0"),
-        AudioEmitter { instances: vec![] },
-        Gun {
-            fire_animation: assets.load("musket.glb#Animation0"),
-            fire_sound: assets.load("gun_shot.ogg"),
+        FirearmBundle {
+            model: assets.load("musket.glb#Scene0"),
+            actions: FirearmActions {
+                fire: FirearmAction {
+                    animation: assets.load("musket.glb#Animation0"),
+                    sound: assets.load("gun_shot.ogg"),
+                    cooldown: 1.0,
+                },
+            },
+            audio_emitter: AudioEmitter { instances: vec![] },
         },
     ));
 
@@ -213,55 +221,38 @@ impl SimplePerformance {
     }
 }
 
-#[derive(Component)]
-struct Gun {
-    fire_animation: Handle<AnimationClip>,
-    fire_sound: Handle<bevy_kira_audio::AudioSource>,
-}
-
-fn fire_gun(
+fn input_handler(
     input: Res<Input<MouseButton>>,
-    mut gun_query: Query<(Entity, &Gun, &mut AudioEmitter), With<Gun>>,
-    children: Query<&Children>,
-    mut query: Query<&mut AnimationPlayer, Without<Gun>>,
-    audio: Res<bevy_kira_audio::Audio>,
-) {
-    for (gun_entity, gun, mut audio_emitter) in gun_query.iter_mut() {
-        for child in children.iter_descendants(gun_entity) {
-            let Ok(mut player) = query.get_mut(child) else {
-                continue;
-            };
-
-            if input.just_pressed(MouseButton::Left) {
-                audio_emitter
-                    .instances
-                    .push(audio.play(gun.fire_sound.clone_weak()).handle());
-
-                player
-                    .set_speed(2.0)
-                    .play_with_transition(
-                        gun.fire_animation.clone_weak(),
-                        Duration::from_millis(10),
-                    )
-                    .set_elapsed(0.0);
-            }
-        }
-    }
-}
-
-fn fire_gun_and_check_for_hits(
-    heads: Query<&GlobalTransform, With<player::Head>>,
-    rapier_context: Res<RapierContext>,
-    input: Res<Input<MouseButton>>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    hands: Query<Entity, (With<player::RightHand>, With<firearm::FirearmActions>)>,
+    mut fire_events: EventWriter<firearm::FirearmEvent<firearm::Fire>>,
 ) {
     if !input.just_pressed(MouseButton::Left) {
         return;
     }
 
-    for head in heads.iter() {
+    for entity in hands.iter() {
+        fire_events.send(firearm::FirearmEvent { details: firearm::Fire, entity });
+    }
+}
+
+fn check_for_bullet_collisions(
+    mut fired_events: EventReader<FirearmEvent<Fired>>,
+    hands: Query<&Parent, With<player::RightHand>>,
+    heads: Query<&GlobalTransform, With<player::Head>>,
+    rapier_context: Res<RapierContext>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for fired_event in fired_events.iter() {
+        let Ok(parent) = hands.get(fired_event.entity) else {
+            continue;
+        };
+
+        let Ok(head) = heads.get(parent.get()) else {
+            continue;
+        };
+
         let ray_dir = head.forward();
         let ray_pos = head.translation() + 2.0 * ray_dir;
         let max_toi = f32::INFINITY;
@@ -279,7 +270,7 @@ fn fire_gun_and_check_for_hits(
 
         // Spawn sphere to represent the hit point
         let hit_handle = meshes.add(Mesh::from(shape::UVSphere {
-            radius: 0.1,
+            radius: 0.01,
             sectors: 4,
             stacks: 4,
         }));
