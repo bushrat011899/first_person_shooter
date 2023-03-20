@@ -15,7 +15,11 @@ impl Plugin for FirearmPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app.add_event::<FirearmEvent<Fire>>()
             .add_event::<FirearmEvent<Fired>>()
-            .add_system(fire_firearms);
+            .add_systems((
+                process_firearm_fire_requests,
+                play_fire_soundeffects,
+                play_fire_animation
+            ));
     }
 }
 
@@ -51,27 +55,23 @@ pub struct FirearmBundle {
     pub audio_emitter: AudioEmitter,
 }
 
-pub fn fire_firearms(
+pub fn process_firearm_fire_requests(
     mut commands: Commands,
     mut fire_events: EventReader<FirearmEvent<Fire>>,
     mut fired_events: EventWriter<FirearmEvent<Fired>>,
     mut gun_query: Query<
         (
             &FirearmActions,
-            &mut AudioEmitter,
             Option<&mut FirearmLastFired>,
         ),
         With<FirearmActions>,
     >,
-    children: Query<&Children>,
-    mut query: Query<&mut AnimationPlayer, Without<FirearmActions>>,
-    audio: Res<Audio>,
     time: Res<Time>,
 ) {
     let current_time = time.elapsed_seconds();
 
     for fire_event in fire_events.iter() {
-        let Ok((actions, mut audio_emitter, last_fired)) = gun_query.get_mut(fire_event.entity) else {
+        let Ok((actions, last_fired)) = gun_query.get_mut(fire_event.entity) else {
             continue;
         };
 
@@ -91,11 +91,47 @@ pub fn fire_firearms(
             }
         };
 
+        fired_events.send(FirearmEvent {
+            details: Fired,
+            entity: fire_event.entity,
+        });
+    }
+}
+
+pub fn play_fire_soundeffects(
+    mut fired_events: EventReader<FirearmEvent<Fired>>,
+    mut gun_query: Query<
+        (
+            &FirearmActions,
+            &mut AudioEmitter,
+        ),
+        With<FirearmActions>,
+    >,
+    audio: Res<Audio>,
+) {
+    for fired_event in fired_events.iter() {
+        let Ok((actions, mut audio_emitter)) = gun_query.get_mut(fired_event.entity) else {
+            continue;
+        };
+
         audio_emitter
             .instances
             .push(audio.play(actions.fire.sound.clone_weak()).handle());
+    }
+}
 
-        for child in children.iter_descendants(fire_event.entity) {
+pub fn play_fire_animation(
+    mut fired_events: EventReader<FirearmEvent<Fired>>,
+    mut gun_query: Query<&FirearmActions, With<FirearmActions>>,
+    children: Query<&Children>,
+    mut query: Query<&mut AnimationPlayer, Without<FirearmActions>>,
+) {
+    for fired_event in fired_events.iter() {
+        let Ok(actions) = gun_query.get_mut(fired_event.entity) else {
+            continue;
+        };
+
+        for child in children.iter_descendants(fired_event.entity) {
             let Ok(mut player) = query.get_mut(child) else {
                 continue;
             };
@@ -104,16 +140,11 @@ pub fn fire_firearms(
                 .set_speed(2.0)
                 .play_with_transition(
                     actions.fire.animation.clone_weak(),
-                    Duration::from_millis(10),
+                    Duration::from_millis(50),
                 )
                 .set_elapsed(0.0);
 
             break;
         }
-
-        fired_events.send(FirearmEvent {
-            details: Fired,
-            entity: fire_event.entity,
-        });
     }
 }

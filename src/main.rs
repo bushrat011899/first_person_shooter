@@ -63,7 +63,6 @@ fn main() {
                 input_handler,
                 check_for_bullet_collisions,
             )
-                .chain()
                 .in_set(OnUpdate(AppState::InGame)),
         )
         .add_systems(
@@ -72,14 +71,11 @@ fn main() {
                 player::right_hand_bobbing,
                 player::left_hand_bobbing,
             )
-                .chain()
                 .in_set(OnUpdate(AppState::InGame))
                 .after(FpsControllerSet::Update),
         )
         .add_systems(
-            (clear_fog_over_time, increase_fog_after_shots)
-                .chain()
-                .in_set(OnUpdate(AppState::InGame)),
+            (clear_fog_over_time, increase_fog_after_shots).in_set(OnUpdate(AppState::InGame)),
         )
         .run();
 }
