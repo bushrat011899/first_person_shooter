@@ -75,7 +75,7 @@ pub fn setup_smoke_particles(mut commands: Commands, mut effects: ResMut<Assets<
         EffectAsset {
             name: "smoke".to_string(),
             capacity: 32768,
-            spawner: Spawner::once(100.0.into(), true),
+            spawner: Spawner::once(3000.0.into(), true),
             ..Default::default()
         }
         .init(InitPositionSphereModifier {
