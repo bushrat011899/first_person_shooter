@@ -12,7 +12,7 @@ use bevy_hanabi::prelude::*;
 use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use firearm::{Fire, FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, Fired};
+use firearm::{FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, FirearmPlugin, Fired};
 use main_menu::MainMenuPlugin;
 use sparks::{setup_smoke_particles, setup_sparks_particles, BulletImpactEffect, SmokeCloudEffect};
 
@@ -33,6 +33,7 @@ enum AppState {
 fn main() {
     App::new()
         .add_state::<AppState>()
+        .insert_resource(Msaa::Sample4)
         .insert_resource(AmbientLight {
             color: Color::WHITE,
             brightness: 0.5,
@@ -40,8 +41,6 @@ fn main() {
         .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
         .insert_resource(SpacialAudio { max_distance: 25. })
-        .add_event::<FirearmEvent<Fire>>()
-        .add_event::<FirearmEvent<Fired>>()
         .add_plugins(
             DefaultPlugins
                 .build()
@@ -51,6 +50,8 @@ fn main() {
         .add_plugin(AudioPlugin)
         .add_plugin(MainMenuPlugin)
         .add_plugin(HanabiPlugin)
+        .add_plugin(FpsControllerPlugin)
+        .add_plugin(FirearmPlugin)
         .add_systems((setup_window, setup_sparks_particles, setup_smoke_particles).on_startup())
         .add_system(load_level.in_schedule(OnEnter(AppState::InGame)))
         .add_systems(
@@ -60,19 +61,20 @@ fn main() {
                 display_text,
                 respawn,
                 input_handler,
-                firearm::fire_firearms,
                 check_for_bullet_collisions,
-                keyboard_and_mouse_input,
-                choose_movement_mode,
-                map_input_orientation,
-                map_input_movement,
-                map_camera_transform,
+            )
+                .chain()
+                .in_set(OnUpdate(AppState::InGame)),
+        )
+        .add_systems(
+            (
                 player::head_bobbing,
                 player::right_hand_bobbing,
                 player::left_hand_bobbing,
             )
                 .chain()
-                .in_set(OnUpdate(AppState::InGame)),
+                .in_set(OnUpdate(AppState::InGame))
+                .after(FpsControllerSet::Update),
         )
         .add_systems(
             (clear_fog_over_time, increase_fog_after_shots)
@@ -292,7 +294,11 @@ fn clear_fog_over_time(time: Res<Time>, mut query: Query<&mut FogSettings, With<
             _ => 0.1,
         };
 
-        let density = if density < 0.1 { 0.1 } else { density - 0.01 * dt };
+        let density = if density < 0.1 {
+            0.1
+        } else {
+            density - 0.01 * dt
+        };
 
         settings.falloff = FogFalloff::Exponential { density };
     }

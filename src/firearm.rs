@@ -3,11 +3,21 @@ use std::time::Duration;
 use bevy::{
     prelude::{
         AnimationClip, AnimationPlayer, Bundle, Children, Commands, Component, Entity, EventReader,
-        EventWriter, Handle, HierarchyQueryExt, Query, Res, Scene, With, Without,
+        EventWriter, Handle, HierarchyQueryExt, Plugin, Query, Res, Scene, With, Without,
     },
     time::Time,
 };
 use bevy_kira_audio::prelude::{Audio, AudioControl, AudioEmitter, AudioSource};
+
+pub struct FirearmPlugin;
+
+impl Plugin for FirearmPlugin {
+    fn build(&self, app: &mut bevy::prelude::App) {
+        app.add_event::<FirearmEvent<Fire>>()
+            .add_event::<FirearmEvent<Fired>>()
+            .add_system(fire_firearms);
+    }
+}
 
 pub struct Fire;
 
