@@ -31,3 +31,12 @@ A bullet can either be shot, garbage, or a slug depending on the caliber of the 
 
  * [Johan Helsing's `Matchbox`](https://github.com/johanhelsing/matchbox)
  * [Johan Helsing's Fork of `Bevy GGRS`](https://github.com/johanhelsing/bevy_ggrs/tree/bevy-0.10)
+
+# Desired Behaviour
+
+ 1. A [settings file](./settings.toml) should be loaded at launch, parsed for user preferences, and saved if/when those settings are modified in-game.
+ 2. The game should start with a menu where the user can choose between quitting, modifying settings, and starting a game.
+ 3. Starting a game should bring the player to a networked lobby where an unknown number of players can wait together.
+ 4. The game should commence when all players agree to start playing.
+ 5. A player can disconnect from an active game, but new players cannot join, and disconnected players cannot reconnect.
+ 6. Once the game is concluded, connected players should be returned to a lobby together to plan the commencement of a new game.

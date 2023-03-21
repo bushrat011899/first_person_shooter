@@ -1,9 +1,7 @@
 use bevy::{prelude::*, tasks::IoTaskPool};
-use bevy_ggrs::{PlayerInputs, Rollback, RollbackIdProvider, Session};
-use bytemuck::{Pod, Zeroable};
+use bevy_ggrs::Session;
 use ggrs::{Config, PlayerHandle, SessionBuilder};
 use matchbox_socket::{PeerId, PeerState, WebRtcSocket};
-use std::{hash::Hash, net::SocketAddr};
 
 mod input;
 
@@ -12,11 +10,9 @@ pub use input::*;
 use crate::AppState;
 
 #[derive(Resource)]
-pub struct MatchMakingConfiguration {
-    pub server: String,
+pub struct MatchConfiguration {
     pub room_id: String,
     pub players: usize,
-    pub tick_rate: usize,
 }
 
 #[derive(Default, Resource)]
@@ -31,8 +27,8 @@ impl Config for GGRSConfig {
     type Address = PeerId;
 }
 
-pub fn start_matchbox_socket(mut commands: Commands, config: Res<MatchMakingConfiguration>) {
-    let room_url = format!("{}/{}", config.server, config.room_id);
+pub fn start_matchbox_socket(mut commands: Commands, config: Res<MatchConfiguration>, game_settings: Res<crate::config::Config>) {
+    let room_url = format!("{}/{}", game_settings.matchmaking.server, config.room_id);
 
     info!("connecting to matchbox server: {:?}", room_url);
     let (socket, message_loop) = WebRtcSocket::new_ggrs(room_url);
@@ -46,9 +42,7 @@ pub fn start_matchbox_socket(mut commands: Commands, config: Res<MatchMakingConf
 }
 
 pub fn watch_for_connected_peers(
-    mut app_state: ResMut<State<crate::AppState>>,
     mut socket: ResMut<SocketResource>,
-    mut commands: Commands,
 ) {
     // regularly call update_peers to update the list of connected peers
     for (peer, new_state) in socket.0.as_mut().unwrap().update_peers() {
@@ -64,7 +58,8 @@ pub fn start_game_when_ready(
     mut socket: ResMut<SocketResource>,
     mut commands: Commands,
     mut next_state: ResMut<NextState<AppState>>,
-    config: Res<MatchMakingConfiguration>,
+    config: Res<MatchConfiguration>,
+    game_settings: Res<crate::config::Config>,
 ) {
     let connected_peers = socket.0.as_ref().unwrap().connected_peers().count();
     let remaining = config.players - (connected_peers + 1);
@@ -90,7 +85,7 @@ pub fn start_game_when_ready(
         .with_num_players(config.players)
         .with_max_prediction_window(max_prediction)
         .with_input_delay(2)
-        .with_fps(config.tick_rate)
+        .with_fps(game_settings.matchmaking.tick_rate().into())
         .expect("invalid fps");
 
     for (i, player) in players.into_iter().enumerate() {

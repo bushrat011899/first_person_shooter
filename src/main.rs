@@ -18,7 +18,7 @@ use bevy_rapier3d::prelude::*;
 
 use firearm::{FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, FirearmPlugin, Fired};
 use main_menu::MainMenuPlugin;
-use multiplayer::{GGRSConfig, MatchMakingConfiguration};
+use multiplayer::{GGRSConfig, MatchConfiguration};
 use sparks::{setup_smoke_particles, setup_sparks_particles, BulletImpactEffect, SmokeCloudEffect};
 
 mod config;
@@ -40,10 +40,19 @@ pub enum AppState {
 }
 
 fn main() {
+    // Load User Settings
+    let config = config::Config::try_load().unwrap_or_default();
+    config.try_save().expect("Must be able to save settings.");
+
     // Start Logging to Standard Out
-    SimpleLogger::new()
-        .with_level(log::LevelFilter::Warn)
-        .with_module_level("first_person_shooter", log::LevelFilter::Info)
+    let mut logger = SimpleLogger::new()
+        .with_level(config.logging.level.into());
+
+    for (module, level) in config.logging.overrides.iter() {
+        logger = logger.with_module_level(module, (*level).into());
+    }
+
+    logger
         .init()
         .expect("Unable to Initialise Logging System");
 
@@ -53,7 +62,7 @@ fn main() {
     // Attach Multiplayer Controls to Bevy
     GGRSPlugin::<GGRSConfig>::new()
         // define frequency of rollback game logic update
-        .with_update_frequency(60)
+        .with_update_frequency(config.matchmaking.tick_rate().into())
         // define system that returns inputs given a player handle, so GGRS can send the inputs around
         .with_input_system(multiplayer::input)
         // register types of components AND resources you want to be rolled back
@@ -70,18 +79,17 @@ fn main() {
 
     // Configure the Rest of the Application
     app.add_state::<AppState>()
+        .insert_resource::<Msaa>(config.graphics.msaa.into())
         .insert_resource(ExactTime {
-            tick_rate: 60,
+            tick_rate: config.matchmaking.tick_rate().into(),
             tick: 0,
             seconds: 0,
         })
-        .insert_resource(MatchMakingConfiguration {
-            server: "ws://192.168.1.119:3536".to_owned(),
+        .insert_resource(config)
+        .insert_resource(MatchConfiguration {
             room_id: "something_random".to_owned(),
-            players: 2,
-            tick_rate: 60,
+            players: 1,
         })
-        .insert_resource(Msaa::Sample4)
         .insert_resource(AmbientLight {
             color: Color::WHITE,
             brightness: 0.5,
