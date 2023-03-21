@@ -1,3 +1,5 @@
+use matchbox_socket::WebRtcSocket;
+use non_linear_time::{track_exact_time, ExactTime};
 use simple_logger::SimpleLogger;
 
 use bevy::{
@@ -10,29 +12,30 @@ use bevy::{
 
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_fps_controller::controller::*;
+use bevy_ggrs::{GGRSPlugin, Session, RollbackIdProvider};
 use bevy_hanabi::prelude::*;
 use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
-use bevy_ggrs::{GGRSPlugin, Session};
 use ggrs::{PlayerType, SessionBuilder, UdpNonBlockingSocket};
 
 use firearm::{FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, FirearmPlugin, Fired};
 use main_menu::MainMenuPlugin;
-use multiplayer::GGRSConfig;
+use multiplayer::{GGRSConfig, MatchMakingConfiguration};
 use sparks::{setup_smoke_particles, setup_sparks_particles, BulletImpactEffect, SmokeCloudEffect};
 
+mod config;
 mod firearm;
+mod fog;
 mod main_menu;
+mod multiplayer;
+mod non_linear_time;
 mod player;
 mod sparks;
-mod multiplayer;
-mod config;
-mod fog;
 
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
 #[derive(States, Debug, Clone, Eq, PartialEq, Hash, Default)]
-enum AppState {
+pub enum AppState {
     #[default]
     MainMenu,
     InGame,
@@ -40,7 +43,11 @@ enum AppState {
 
 fn main() {
     // Start Logging to Standard Out
-    SimpleLogger::new().init().expect("Unable to Initialise Logging System");
+    SimpleLogger::new()
+        .with_level(log::LevelFilter::Warn)
+        .with_module_level("first_person_shooter", log::LevelFilter::Info)
+        .init()
+        .expect("Unable to Initialise Logging System");
 
     // Create the Bevy Application
     let mut app = App::new();
@@ -53,33 +60,29 @@ fn main() {
         .with_input_system(multiplayer::input)
         // register types of components AND resources you want to be rolled back
         .register_rollback_component::<Transform>()
+        .register_rollback_resource::<ExactTime>()
         // these systems will be executed as part of the advance frame update
         .with_rollback_schedule({
             let mut schedule = Schedule::default();
-            //schedule.add_systems((move_cube_system, increase_frame_system));
+            schedule.add_system(track_exact_time);
             schedule
         })
         // make it happen in the bevy app
         .build(&mut app);
 
-    // create a GGRS session
-    // This requires something to organise the number of players, and the address of every player before creating a session.
-    let mut sess_build = SessionBuilder::<GGRSConfig>::new()
-        .with_num_players(1)
-        .with_max_prediction_window(12) // (optional) set max prediction window
-        .with_input_delay(2); // (optional) set input delay for the local player
-
-    // Add Players?
-    sess_build = sess_build.add_player(PlayerType::Local, 0).expect("Must be able to add the local player");
-
-    // start the GGRS session
-    let socket = UdpNonBlockingSocket::bind_to_port(44444).expect("Must be able to bind to port");
-    let sess = sess_build.start_p2p_session(socket).expect("Must be able to start P2P session");
-
     // Configure the Rest of the Application
-    app
-        .add_state::<AppState>()
-        .insert_resource(Session::P2PSession(sess))
+    app.add_state::<AppState>()
+        .insert_resource(ExactTime {
+            tick_rate: 60,
+            tick: 0,
+            seconds: 0,
+        })
+        .insert_resource(MatchMakingConfiguration {
+            server: "ws://192.168.1.119:3536".to_owned(),
+            room_id: "something_random".to_owned(),
+            players: 2,
+            tick_rate: 60,
+        })
         .insert_resource(Msaa::Sample4)
         .insert_resource(AmbientLight {
             color: Color::WHITE,
@@ -107,7 +110,21 @@ fn main() {
         .add_plugin(HanabiPlugin)
         .add_plugin(FpsControllerPlugin)
         .add_plugin(FirearmPlugin)
-        .add_systems((multiplayer::start_matchbox_socket, setup_sparks_particles, setup_smoke_particles).on_startup())
+        .add_systems(
+            (
+                multiplayer::start_matchbox_socket,
+                setup_sparks_particles,
+                setup_smoke_particles,
+            )
+                .on_startup(),
+        )
+        .add_systems(
+            (
+                multiplayer::watch_for_connected_peers,
+                multiplayer::start_game_when_ready,
+            )
+                .in_set(OnUpdate(AppState::MainMenu)),
+        )
         .add_system(load_level.in_schedule(OnEnter(AppState::InGame)))
         .add_systems(
             (
@@ -130,7 +147,8 @@ fn main() {
                 .after(FpsControllerSet::Update),
         )
         .add_systems(
-            (fog::clear_fog_over_time, fog::increase_fog_after_shots).in_set(OnUpdate(AppState::InGame)),
+            (fog::clear_fog_over_time, fog::increase_fog_after_shots)
+                .in_set(OnUpdate(AppState::InGame)),
         )
         .run();
 }
@@ -139,6 +157,7 @@ fn load_level(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut rip: ResMut<RollbackIdProvider>,
     assets: Res<AssetServer>,
 ) {
     // Create a directional light for the environment

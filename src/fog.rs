@@ -1,6 +1,9 @@
 use bevy::prelude::*;
 
-use crate::{firearm::{FirearmEvent, Fired}, player};
+use crate::{
+    firearm::{FirearmEvent, Fired},
+    player,
+};
 
 pub fn increase_fog_after_shots(
     mut fired_events: EventReader<FirearmEvent<Fired>>,
@@ -24,7 +27,10 @@ pub fn increase_fog_after_shots(
     }
 }
 
-pub fn clear_fog_over_time(time: Res<Time>, mut query: Query<&mut FogSettings, With<player::Head>>) {
+pub fn clear_fog_over_time(
+    time: Res<Time>,
+    mut query: Query<&mut FogSettings, With<player::Head>>,
+) {
     let dt = time.delta_seconds();
 
     for mut settings in query.iter_mut() {

@@ -8,7 +8,7 @@ pub struct MainMenuPlugin;
 impl Plugin for MainMenuPlugin {
     fn build(&self, app: &mut App) {
         app.add_system(setup_main_menu.in_schedule(OnEnter(AppState::MainMenu)))
-            .add_systems((start_game, spin_main_menu_cube).in_set(OnUpdate(AppState::MainMenu)))
+            .add_system(spin_main_menu_cube.in_set(OnUpdate(AppState::MainMenu)))
             .add_system(setdown_main_menu.in_schedule(OnExit(AppState::MainMenu)));
     }
 }
@@ -108,6 +108,7 @@ fn setdown_main_menu(mut commands: Commands, query: Query<Entity, With<MainMenuE
     }
 }
 
+/*
 /// React to player input to start the game.
 fn start_game(key: Res<Input<KeyCode>>, mut next_state: ResMut<NextState<AppState>>) {
     let any_key_pressed = key.get_just_pressed().next().is_some();
@@ -116,3 +117,4 @@ fn start_game(key: Res<Input<KeyCode>>, mut next_state: ResMut<NextState<AppStat
         next_state.set(AppState::InGame);
     }
 }
+ */
