@@ -1,4 +1,3 @@
-use matchbox_socket::WebRtcSocket;
 use non_linear_time::{track_exact_time, ExactTime};
 use simple_logger::SimpleLogger;
 
@@ -12,11 +11,10 @@ use bevy::{
 
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_fps_controller::controller::*;
-use bevy_ggrs::{GGRSPlugin, Session, RollbackIdProvider};
+use bevy_ggrs::{GGRSPlugin, RollbackIdProvider};
 use bevy_hanabi::prelude::*;
 use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
-use ggrs::{PlayerType, SessionBuilder, UdpNonBlockingSocket};
 
 use firearm::{FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, FirearmPlugin, Fired};
 use main_menu::MainMenuPlugin;
