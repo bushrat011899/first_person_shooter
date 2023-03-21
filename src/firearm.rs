@@ -18,7 +18,7 @@ impl Plugin for FirearmPlugin {
             .add_systems((
                 process_firearm_fire_requests,
                 play_fire_soundeffects,
-                play_fire_animation
+                play_fire_animation,
             ));
     }
 }
@@ -59,13 +59,7 @@ pub fn process_firearm_fire_requests(
     mut commands: Commands,
     mut fire_events: EventReader<FirearmEvent<Fire>>,
     mut fired_events: EventWriter<FirearmEvent<Fired>>,
-    mut gun_query: Query<
-        (
-            &FirearmActions,
-            Option<&mut FirearmLastFired>,
-        ),
-        With<FirearmActions>,
-    >,
+    mut gun_query: Query<(&FirearmActions, Option<&mut FirearmLastFired>), With<FirearmActions>>,
     time: Res<Time>,
 ) {
     let current_time = time.elapsed_seconds();
@@ -100,13 +94,7 @@ pub fn process_firearm_fire_requests(
 
 pub fn play_fire_soundeffects(
     mut fired_events: EventReader<FirearmEvent<Fired>>,
-    mut gun_query: Query<
-        (
-            &FirearmActions,
-            &mut AudioEmitter,
-        ),
-        With<FirearmActions>,
-    >,
+    mut gun_query: Query<(&FirearmActions, &mut AudioEmitter), With<FirearmActions>>,
     audio: Res<Audio>,
 ) {
     for fired_event in fired_events.iter() {

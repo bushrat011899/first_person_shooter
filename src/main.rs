@@ -1,3 +1,5 @@
+use simple_logger::SimpleLogger;
+
 use bevy::{
     gltf::Gltf,
     gltf::{GltfMesh, GltfNode},
@@ -11,15 +13,20 @@ use bevy_fps_controller::controller::*;
 use bevy_hanabi::prelude::*;
 use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
+use bevy_ggrs::{GGRSPlugin, Session};
+use ggrs::{PlayerType, SessionBuilder, UdpNonBlockingSocket};
 
 use firearm::{FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, FirearmPlugin, Fired};
 use main_menu::MainMenuPlugin;
+use multiplayer::GGRSConfig;
 use sparks::{setup_smoke_particles, setup_sparks_particles, BulletImpactEffect, SmokeCloudEffect};
 
 mod firearm;
 mod main_menu;
 mod player;
 mod sparks;
+mod multiplayer;
+mod config;
 
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
@@ -31,8 +38,47 @@ enum AppState {
 }
 
 fn main() {
-    App::new()
+    // Start Logging to Standard Out
+    SimpleLogger::new().init().expect("Unable to Initialise Logging System");
+
+    // Create the Bevy Application
+    let mut app = App::new();
+
+    // Attach Multiplayer Controls to Bevy
+    GGRSPlugin::<GGRSConfig>::new()
+        // define frequency of rollback game logic update
+        .with_update_frequency(60)
+        // define system that returns inputs given a player handle, so GGRS can send the inputs around
+        .with_input_system(multiplayer::input)
+        // register types of components AND resources you want to be rolled back
+        .register_rollback_component::<Transform>()
+        // these systems will be executed as part of the advance frame update
+        .with_rollback_schedule({
+            let mut schedule = Schedule::default();
+            //schedule.add_systems((move_cube_system, increase_frame_system));
+            schedule
+        })
+        // make it happen in the bevy app
+        .build(&mut app);
+
+    // create a GGRS session
+    // This requires something to organise the number of players, and the address of every player before creating a session.
+    let mut sess_build = SessionBuilder::<GGRSConfig>::new()
+        .with_num_players(1)
+        .with_max_prediction_window(12) // (optional) set max prediction window
+        .with_input_delay(2); // (optional) set input delay for the local player
+
+    // Add Players?
+    sess_build = sess_build.add_player(PlayerType::Local, 0).expect("Must be able to add the local player");
+
+    // start the GGRS session
+    let socket = UdpNonBlockingSocket::bind_to_port(44444).expect("Must be able to bind to port");
+    let sess = sess_build.start_p2p_session(socket).expect("Must be able to start P2P session");
+
+    // Configure the Rest of the Application
+    app
         .add_state::<AppState>()
+        .insert_resource(Session::P2PSession(sess))
         .insert_resource(Msaa::Sample4)
         .insert_resource(AmbientLight {
             color: Color::WHITE,
@@ -43,6 +89,14 @@ fn main() {
         .insert_resource(SpacialAudio { max_distance: 25. })
         .add_plugins(
             DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Muskrats at Dawn".to_owned(),
+                        mode: WindowMode::Windowed,
+                        ..default()
+                    }),
+                    ..default()
+                })
                 .build()
                 .add_before::<bevy::asset::AssetPlugin, _>(EmbeddedAssetPlugin),
         )
@@ -52,7 +106,7 @@ fn main() {
         .add_plugin(HanabiPlugin)
         .add_plugin(FpsControllerPlugin)
         .add_plugin(FirearmPlugin)
-        .add_systems((setup_window, setup_sparks_particles, setup_smoke_particles).on_startup())
+        .add_systems((multiplayer::start_matchbox_socket, setup_sparks_particles, setup_smoke_particles).on_startup())
         .add_system(load_level.in_schedule(OnEnter(AppState::InGame)))
         .add_systems(
             (
@@ -80,13 +134,6 @@ fn main() {
         .run();
 }
 
-/// Setup the main window during application launch.
-fn setup_window(mut window: Query<&mut Window>) {
-    let mut window = window.single_mut();
-    window.title = String::from("Muskrats at Dawn");
-    //window.mode = WindowMode::Fullscreen;
-}
-
 fn load_level(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -103,8 +150,8 @@ fn load_level(
 
     commands.spawn((
         PbrBundle {
-            mesh: cube_handle.clone(),
-            material: cube_material_handle.clone(),
+            mesh: cube_handle,
+            material: cube_material_handle,
             transform: Transform::from_xyz(5.0, 2.0, 1.0),
             ..default()
         },
@@ -261,13 +308,11 @@ fn increase_fog_after_shots(
     mut fired_events: EventReader<FirearmEvent<Fired>>,
     mut query: Query<&mut FogSettings, With<player::Head>>,
 ) {
-    let fog_steps = fired_events.iter().count();
+    let fog_steps: u16 = fired_events.iter().count().try_into().unwrap_or(u16::MAX);
 
-    if !(fog_steps > 0) {
+    if fog_steps == 0 {
         return;
     };
-
-    println!("{fog_steps}");
 
     for mut settings in query.iter_mut() {
         let density = match settings.falloff {
@@ -275,7 +320,7 @@ fn increase_fog_after_shots(
             _ => 0.1,
         };
 
-        let density = density * 1.2_f32.powf(fog_steps as f32);
+        let density = density * 1.2_f32.powf(fog_steps.into());
 
         settings.falloff = FogFalloff::Exponential { density };
     }
@@ -386,7 +431,7 @@ fn scene_colliders(
     commands.spawn(SceneBundle { scene, ..default() });
 
     for node in &gltf.nodes {
-        let node = gltf_node_assets.get(&node).unwrap();
+        let node = gltf_node_assets.get(node).unwrap();
         let Some(gltf_mesh) = node.mesh.clone() else {
             continue;
         };

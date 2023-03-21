@@ -3,13 +3,18 @@ name = "first_person_shooter"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 bevy = "0.10"
 bevy_rapier3d = "0.21"
-bevy_fps_controller = { path="./../bevy_fps_controller" }
+bevy_fps_controller = { git="https://github.com/bushrat011899/bevy_fps_controller" }
 bevy_kira_audio = "0.15"
 bevy_embedded_assets = "0.7"
 bevy_hanabi = "0.6"
-bevy_ggrs = { git="https://github.com/johanhelsing/bevy_ggrs.git", branch="bevy-0.10", commit="cc959b8" }
+bevy_ggrs = { git="https://github.com/johanhelsing/bevy_ggrs", branch="bevy-0.10" }
+ggrs = { git="https://github.com/gschup/ggrs", features=["sync-send"] }
+bytemuck = "1.13"
+matchbox_socket = { git="https://github.com/johanhelsing/matchbox", features = ["ggrs-socket"] }
+simple_logger = "4.1.0"
+log = "0.4.17"
+toml = "0.7.3"
+serde = "1.0.158"

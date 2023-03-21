@@ -36,8 +36,8 @@ fn setup_main_menu(
 
     commands.spawn((
         PbrBundle {
-            mesh: cube_handle.clone(),
-            material: cube_material_handle.clone(),
+            mesh: cube_handle,
+            material: cube_material_handle,
             transform: Transform::from_xyz(0.0, 0.0, 0.0),
             ..default()
         },
