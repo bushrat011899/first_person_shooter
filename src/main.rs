@@ -27,6 +27,7 @@ mod player;
 mod sparks;
 mod multiplayer;
 mod config;
+mod fog;
 
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
@@ -129,7 +130,7 @@ fn main() {
                 .after(FpsControllerSet::Update),
         )
         .add_systems(
-            (clear_fog_over_time, increase_fog_after_shots).in_set(OnUpdate(AppState::InGame)),
+            (fog::clear_fog_over_time, fog::increase_fog_after_shots).in_set(OnUpdate(AppState::InGame)),
         )
         .run();
 }
@@ -139,28 +140,7 @@ fn load_level(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     assets: Res<AssetServer>,
-    audio: Res<bevy_kira_audio::Audio>,
 ) {
-    // Spawn a cube that plays music
-    let cube_handle = meshes.add(Mesh::from(shape::Cube { size: 1.0 }));
-    let cube_material_handle = materials.add(StandardMaterial {
-        base_color: Color::rgb(0.8, 0.7, 0.6),
-        ..default()
-    });
-
-    commands.spawn((
-        PbrBundle {
-            mesh: cube_handle,
-            material: cube_material_handle,
-            transform: Transform::from_xyz(5.0, 2.0, 1.0),
-            ..default()
-        },
-        AudioEmitter {
-            instances: vec![audio.play(assets.load("e1m1_cover.ogg")).looped().handle()],
-        },
-        Collider::cuboid(0.5, 0.5, 0.5),
-    ));
-
     // Create a directional light for the environment
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
@@ -301,47 +281,6 @@ fn input_handler(
             details: firearm::Fire,
             entity,
         });
-    }
-}
-
-fn increase_fog_after_shots(
-    mut fired_events: EventReader<FirearmEvent<Fired>>,
-    mut query: Query<&mut FogSettings, With<player::Head>>,
-) {
-    let fog_steps: u16 = fired_events.iter().count().try_into().unwrap_or(u16::MAX);
-
-    if fog_steps == 0 {
-        return;
-    };
-
-    for mut settings in query.iter_mut() {
-        let density = match settings.falloff {
-            FogFalloff::Exponential { density } => density,
-            _ => 0.1,
-        };
-
-        let density = density * 1.2_f32.powf(fog_steps.into());
-
-        settings.falloff = FogFalloff::Exponential { density };
-    }
-}
-
-fn clear_fog_over_time(time: Res<Time>, mut query: Query<&mut FogSettings, With<player::Head>>) {
-    let dt = time.delta_seconds();
-
-    for mut settings in query.iter_mut() {
-        let density = match settings.falloff {
-            FogFalloff::Exponential { density } => density,
-            _ => 0.1,
-        };
-
-        let density = if density < 0.1 {
-            0.1
-        } else {
-            density - 0.01 * dt
-        };
-
-        settings.falloff = FogFalloff::Exponential { density };
     }
 }
 
