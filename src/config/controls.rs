@@ -48,6 +48,7 @@ pub struct ControlBindings {
     pub pour: UserInput,
     pub load: UserInput,
     pub fire: UserInput,
+    pub pointer_sensitivity: f32,
 }
 
 impl Default for ControlBindings {
@@ -64,6 +65,7 @@ impl Default for ControlBindings {
             pour: KeyCode::F.into(),
             load: KeyCode::V.into(),
             fire: MouseButton::Left.into(),
+            pointer_sensitivity: 0.5
         }
     }
 }
@@ -76,9 +78,9 @@ impl ControlBindings {
             UserAction::MoveBackward => &self.backward,
             UserAction::MoveLeft => &self.left,
             UserAction::MoveRight => &self.right,
-            UserAction::Jump => &self.crouch,
-            UserAction::Crouch => &self.sprint,
-            UserAction::Sprint => &self.jump,
+            UserAction::Jump => &self.jump,
+            UserAction::Crouch => &self.crouch,
+            UserAction::Sprint => &self.sprint,
             UserAction::Ram => &self.ram,
             UserAction::Pour => &self.pour,
             UserAction::Load => &self.load,

@@ -18,18 +18,6 @@ impl Default for MoveMode {
     }
 }
 
-/// System responsible for choosing the movement mode of the players.
-pub fn choose_movement_mode(mut query: Query<(&FpsControllerInput, &mut MoveMode)>) {
-    for (input, mut move_mode) in query.iter_mut() {
-        if input.fly {
-            *move_mode = match *move_mode {
-                MoveMode::Noclip => MoveMode::Ground,
-                MoveMode::Ground => MoveMode::Noclip,
-            }
-        }
-    }
-}
-
 /// System responsible for mapping abstract look inputs into concrete player orientation.
 pub fn map_input_orientation(mut query: Query<(&mut FpsController, &mut FpsControllerInput)>) {
     for (mut controller, mut input) in query.iter_mut() {

@@ -75,7 +75,6 @@ pub fn spawn_player(commands: &mut Commands, player_id: usize) -> PlayerEntity {
                 ..default()
             },
             VisibilityBundle::default(),
-            AudioReceiver,
         ));
 
     commands

@@ -47,7 +47,7 @@ pub fn capture_and_encode_user_input(
 
     input.pointer = mouse_events
         .iter()
-        .map(|event| event.delta)
+        .map(|event| event.delta * config.controls.pointer_sensitivity / 40.0)
         .sum::<Vec2>()
         .into();
 
