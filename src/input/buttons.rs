@@ -84,15 +84,33 @@ mod tests {
         for action in all::<UserAction>() {
             let mut input = ButtonInput::default();
 
-            assert_eq!(input.get(action), false, "Action: {:?}; Byte Dump: {:?}", action, input.bytes);
+            assert_eq!(
+                input.get(action),
+                false,
+                "Action: {:?}; Byte Dump: {:?}",
+                action,
+                input.bytes
+            );
 
             input.set(action, true);
 
-            assert_eq!(input.get(action), true, "Action: {:?}; Byte Dump: {:?}", action, input.bytes);
-            
+            assert_eq!(
+                input.get(action),
+                true,
+                "Action: {:?}; Byte Dump: {:?}",
+                action,
+                input.bytes
+            );
+
             input.set(action, false);
-            
-            assert_eq!(input.get(action), false, "Action: {:?}; Byte Dump: {:?}", action, input.bytes);
+
+            assert_eq!(
+                input.get(action),
+                false,
+                "Action: {:?}; Byte Dump: {:?}",
+                action,
+                input.bytes
+            );
         }
     }
 }

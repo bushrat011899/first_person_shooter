@@ -101,7 +101,7 @@ pub fn spawn_player(commands: &mut Commands, player_id: usize) -> PlayerEntity {
             Ccd { enabled: true },
             FpsControllerBundle::default(),
             TransformBundle::from_transform(Transform::from_translation(Vec3 {
-                x: 0.0,
+                x: 0.0 + 3.0 * player_id as f32,
                 y: 1.0,
                 z: 0.0,
             })),

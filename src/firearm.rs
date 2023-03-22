@@ -5,7 +5,8 @@ use bevy::{
         AnimationClip, AnimationPlayer, Bundle, Children, Commands, Component, Entity, EventReader,
         EventWriter, Handle, HierarchyQueryExt, Plugin, Query, Res, Scene, With, Without,
     },
-    time::Time, reflect::Reflect,
+    reflect::Reflect,
+    time::Time,
 };
 use bevy_kira_audio::prelude::{Audio, AudioControl, AudioEmitter, AudioSource};
 

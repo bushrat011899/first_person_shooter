@@ -1,6 +1,6 @@
 use bevy::prelude::{KeyCode, MouseButton};
-use serde::{Deserialize, Serialize};
 use enum_iterator::Sequence;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Sequence, Debug)]
 pub enum UserAction {
@@ -65,7 +65,7 @@ impl Default for ControlBindings {
             pour: KeyCode::F.into(),
             load: KeyCode::V.into(),
             fire: MouseButton::Left.into(),
-            pointer_sensitivity: 0.5
+            pointer_sensitivity: 0.5,
         }
     }
 }

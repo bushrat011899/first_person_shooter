@@ -1,8 +1,8 @@
 use bevy::{input::mouse::MouseMotion, prelude::*};
 use bytemuck::{Pod, Zeroable};
+use enum_iterator::all;
 use ggrs::PlayerHandle;
 use serde::{Deserialize, Serialize};
-use enum_iterator::all;
 
 pub use buttons::*;
 pub use pointer::*;

@@ -2,7 +2,7 @@ use config::UserAction;
 use ggrs::InputStatus;
 use input::LocalPlayerHandle;
 use non_linear_time::{track_exact_time, ExactTime};
-use player::{OwningPlayer, Head};
+use player::{Head, OwningPlayer};
 use simple_logger::SimpleLogger;
 
 use bevy::{
@@ -19,13 +19,14 @@ use bevy_hanabi::prelude::*;
 use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use firearm::{FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, FirearmPlugin, Fired};
+use controller::*;
+use firearm::{FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, Fired};
 use main_menu::MainMenuPlugin;
 use multiplayer::{GGRSConfig, MatchConfiguration};
 use particles::{setup_smoke_particles, setup_sparks_particles, SmokeCloudEffect, SparksEffect};
-use controller::*;
 
 mod config;
+mod controller;
 mod firearm;
 mod fog;
 mod input;
@@ -34,7 +35,6 @@ mod multiplayer;
 mod non_linear_time;
 mod particles;
 mod player;
-mod controller;
 
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
@@ -43,22 +43,6 @@ pub enum AppState {
     #[default]
     MainMenu,
     InGame,
-}
-
-pub fn log_user_inputs(
-    inputs: Res<PlayerInputs<GGRSConfig>>,
-    local_player: Res<LocalPlayerHandle>,
-) {
-    for (player, (input, status)) in inputs.iter().enumerate() {
-        //info!("Player {} sent: {:?} with status {:?}", player, input, status);
-        let tag = if local_player.0 == player { "Local" } else { "Remote" };
-        if input.buttons.get(UserAction::Fire) {
-            info!("[{tag}] Player {player} Fired!");
-        }
-        if input.buttons.get(UserAction::Jump) {
-            info!("[{tag}] Player {player} Jumped!");
-        }
-    }
 }
 
 fn main() {
@@ -92,7 +76,7 @@ fn main() {
             let mut schedule = Schedule::default();
 
             schedule
-                .add_systems((track_exact_time, log_user_inputs))
+                .add_systems((activate_spatial_audio_when_applicable, track_exact_time))
                 .add_system(map_player_input_to_controller_input.in_set(FpsControllerSet::Input))
                 .add_systems(
                     (
@@ -105,15 +89,30 @@ fn main() {
                 )
                 .add_systems(
                     (
+                        input_handler,
+                        firearm::process_firearm_fire_requests,
+                        firearm::play_fire_soundeffects,
+                        firearm::play_fire_animation,
+                        fog::clear_fog_over_time,
+                        fog::increase_fog_after_shots,
                         manage_cursor,
                         scene_colliders,
                         display_text,
                         respawn,
-                        input_handler,
                         check_for_bullet_collisions,
                         activate_camera_of_local_player,
                     )
+                        .chain()
                         .in_set(OnUpdate(AppState::InGame)),
+                )
+                .add_systems(
+                    (
+                        player::head_bobbing,
+                        player::right_hand_bobbing,
+                        player::left_hand_bobbing,
+                    )
+                        .in_set(OnUpdate(AppState::InGame))
+                        .after(FpsControllerSet::Update),
                 );
 
             schedule
@@ -123,6 +122,8 @@ fn main() {
 
     // Configure the Rest of the Application
     app.add_state::<AppState>()
+        .add_event::<FirearmEvent<firearm::Fire>>()
+        .add_event::<FirearmEvent<firearm::Fired>>()
         .insert_resource(LocalPlayerHandle(0))
         .insert_resource(ExactTime {
             tick_rate: config.matchmaking.tick_rate().into(),
@@ -131,7 +132,7 @@ fn main() {
         })
         .insert_resource(MatchConfiguration {
             room_id: "something_random".to_owned(),
-            players: 2,
+            players: 3,
         })
         .insert_resource(AmbientLight {
             color: Color::WHITE,
@@ -139,7 +140,6 @@ fn main() {
         })
         .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
-        //.insert_resource(SpacialAudio { max_distance: 25. })
         .insert_resource::<Msaa>(config.graphics.msaa.into())
         .add_plugins(
             DefaultPlugins
@@ -168,10 +168,7 @@ fn main() {
         .add_plugin(AudioPlugin)
         .add_plugin(MainMenuPlugin)
         .add_plugin(HanabiPlugin)
-        .add_plugin(FirearmPlugin)
-        .configure_set(
-            FpsControllerSet::Input.before(FpsControllerSet::Update),
-        )
+        .configure_set(FpsControllerSet::Input.before(FpsControllerSet::Update))
         .add_systems(
             (
                 multiplayer::start_matchbox_socket,
@@ -187,27 +184,32 @@ fn main() {
             )
                 .in_set(OnUpdate(AppState::MainMenu)),
         )
-        .add_systems((load_level, spawn_players, add_audio_listener_to_head_of_local_player).in_schedule(OnEnter(AppState::InGame)))
-        
         .add_systems(
             (
-                player::head_bobbing,
-                player::right_hand_bobbing,
-                player::left_hand_bobbing,
+                load_level,
+                spawn_players,
+                add_audio_listener_to_head_of_local_player,
             )
-                .in_set(OnUpdate(AppState::InGame))
-                .after(FpsControllerSet::Update),
-        )
-        .add_systems(
-            (fog::clear_fog_over_time, fog::increase_fog_after_shots)
-                .in_set(OnUpdate(AppState::InGame)),
+                .in_schedule(OnEnter(AppState::InGame)),
         )
         .run();
 }
 
+fn activate_spatial_audio_when_applicable(
+    mut commands: Commands,
+    query: Query<&AudioReceiver>,
+    settings: Option<Res<SpacialAudio>>,
+) {
+    if query.iter().count() > 0 && settings.is_none() {
+        commands.insert_resource(SpacialAudio { max_distance: 25. })
+    } else if query.iter().count() == 0 && settings.is_some() {
+        commands.remove_resource::<SpacialAudio>()
+    }
+}
+
 fn activate_camera_of_local_player(
     local_player: Res<LocalPlayerHandle>,
-    mut query: Query<(&OwningPlayer, &mut Camera)>
+    mut query: Query<(&OwningPlayer, &mut Camera)>,
 ) {
     for (OwningPlayer(player), mut camera) in query.iter_mut() {
         camera.is_active = *player == local_player.0;
@@ -217,7 +219,7 @@ fn activate_camera_of_local_player(
 fn add_audio_listener_to_head_of_local_player(
     mut commands: Commands,
     local_player: Res<LocalPlayerHandle>,
-    mut query: Query<(Entity, &OwningPlayer), (With<Head>, Without<bevy_kira_audio::prelude::AudioReceiver>)>
+    mut query: Query<(Entity, &OwningPlayer), (With<Head>, Without<AudioReceiver>)>,
 ) {
     for (entity, OwningPlayer(player)) in query.iter_mut() {
         let Some(mut entity) = commands.get_entity(entity) else {
@@ -225,7 +227,7 @@ fn add_audio_listener_to_head_of_local_player(
         };
 
         if *player == local_player.0 {
-            entity.insert(bevy_kira_audio::prelude::AudioReceiver);
+            entity.insert(AudioReceiver);
         }
     }
 }
@@ -236,7 +238,7 @@ fn spawn_players(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut rip: ResMut<bevy_ggrs::RollbackIdProvider>,
     assets: Res<AssetServer>,
-    match_settings: Res<MatchConfiguration>
+    match_settings: Res<MatchConfiguration>,
 ) {
     for player_id in 0..match_settings.players {
         // Spawn the player
@@ -255,19 +257,21 @@ fn spawn_players(
             ..default()
         });
 
-        commands.entity(player_entities.head).insert((FogSettings {
-            color: Color::rgba(0.1, 0.1, 0.1, 1.0),
-            falloff: FogFalloff::Exponential { density: 0.1 },
-            ..default()
-        }, rip.next()));
+        commands.entity(player_entities.head).insert((
+            FogSettings {
+                color: Color::rgba(0.1, 0.1, 0.1, 1.0),
+                falloff: FogFalloff::Exponential { density: 0.1 },
+                ..default()
+            },
+            rip.next(),
+        ));
 
         commands
             .entity(player_entities.torso)
             .insert((player_handle, player_material_handle));
 
-        commands
-            .entity(player_entities.right_hand)
-            .insert((FirearmBundle {
+        commands.entity(player_entities.right_hand).insert((
+            FirearmBundle {
                 model: assets.load("musket.glb#Scene0"),
                 actions: FirearmActions {
                     fire: FirearmAction {
@@ -277,18 +281,19 @@ fn spawn_players(
                     },
                 },
                 audio_emitter: AudioEmitter { instances: vec![] },
-            }, rip.next()));
+            },
+            rip.next(),
+        ));
 
         commands.entity(player_entities.feet).insert(rip.next());
-        commands.entity(player_entities.left_hand).insert(rip.next());
+        commands
+            .entity(player_entities.left_hand)
+            .insert(rip.next());
         commands.entity(player_entities.torso).insert(rip.next());
     }
 }
 
-fn load_level(
-    mut commands: Commands,
-    assets: Res<AssetServer>,
-) {
+fn load_level(mut commands: Commands, assets: Res<AssetServer>) {
     // Create a directional light for the environment
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
