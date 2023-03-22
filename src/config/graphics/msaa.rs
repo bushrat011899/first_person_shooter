@@ -5,7 +5,7 @@ pub enum Msaa {
     Off,
     X2,
     X4,
-    X8
+    X8,
 }
 
 impl From<bevy::prelude::Msaa> for Msaa {
@@ -26,19 +26,6 @@ impl Into<bevy::prelude::Msaa> for Msaa {
             Msaa::X2 => bevy::prelude::Msaa::Sample2,
             Msaa::X4 => bevy::prelude::Msaa::Sample4,
             Msaa::X8 => bevy::prelude::Msaa::Sample8,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct GraphicsSettings {
-    pub msaa: Msaa,
-}
-
-impl Default for GraphicsSettings {
-    fn default() -> Self {
-        Self {
-            msaa: Msaa::X4
         }
     }
 }

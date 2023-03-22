@@ -67,7 +67,7 @@ fn setup_main_menu(
     // Create some prompt text
     commands.spawn((
         TextBundle::from_section(
-            "Press Any Key to Start!",
+            "Waiting for players to join...",
             TextStyle {
                 font: assets.load("fira_mono.ttf"),
                 font_size: 48.0,

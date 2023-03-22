@@ -6,12 +6,12 @@ use bevy::{
     gltf::{GltfMesh, GltfNode},
     math::Vec3Swizzles,
     prelude::*,
-    window::{CursorGrabMode, WindowMode},
+    window::{CursorGrabMode, PresentMode, WindowResolution},
 };
 
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_fps_controller::controller::*;
-use bevy_ggrs::{GGRSPlugin, RollbackIdProvider};
+use bevy_ggrs::{GGRSPlugin, PlayerInputs};
 use bevy_hanabi::prelude::*;
 use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -19,16 +19,17 @@ use bevy_rapier3d::prelude::*;
 use firearm::{FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, FirearmPlugin, Fired};
 use main_menu::MainMenuPlugin;
 use multiplayer::{GGRSConfig, MatchConfiguration};
-use sparks::{setup_smoke_particles, setup_sparks_particles, BulletImpactEffect, SmokeCloudEffect};
+use particles::{setup_smoke_particles, setup_sparks_particles, SmokeCloudEffect, SparksEffect};
 
 mod config;
 mod firearm;
 mod fog;
+mod input;
 mod main_menu;
 mod multiplayer;
 mod non_linear_time;
+mod particles;
 mod player;
-mod sparks;
 
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
@@ -39,22 +40,27 @@ pub enum AppState {
     InGame,
 }
 
+pub fn log_user_inputs(
+    inputs: Res<PlayerInputs<GGRSConfig>>,
+) {
+    for (player, (input, status)) in inputs.iter().enumerate() {
+        info!("Player {} sent: {:?} with status {:?}", player, input, status);
+    }
+}
+
 fn main() {
     // Load User Settings
     let config = config::Config::try_load().unwrap_or_default();
     config.try_save().expect("Must be able to save settings.");
 
     // Start Logging to Standard Out
-    let mut logger = SimpleLogger::new()
-        .with_level(config.logging.level.into());
+    let mut logger = SimpleLogger::new().with_level(config.logging.level.into());
 
     for (module, level) in config.logging.overrides.iter() {
         logger = logger.with_module_level(module, (*level).into());
     }
 
-    logger
-        .init()
-        .expect("Unable to Initialise Logging System");
+    logger.init().expect("Unable to Initialise Logging System");
 
     // Create the Bevy Application
     let mut app = App::new();
@@ -64,14 +70,14 @@ fn main() {
         // define frequency of rollback game logic update
         .with_update_frequency(config.matchmaking.tick_rate().into())
         // define system that returns inputs given a player handle, so GGRS can send the inputs around
-        .with_input_system(multiplayer::input)
+        .with_input_system(input::capture_and_encode_user_input)
         // register types of components AND resources you want to be rolled back
         .register_rollback_component::<Transform>()
         .register_rollback_resource::<ExactTime>()
         // these systems will be executed as part of the advance frame update
         .with_rollback_schedule({
             let mut schedule = Schedule::default();
-            schedule.add_system(track_exact_time);
+            schedule.add_systems((track_exact_time, log_user_inputs));
             schedule
         })
         // make it happen in the bevy app
@@ -79,13 +85,11 @@ fn main() {
 
     // Configure the Rest of the Application
     app.add_state::<AppState>()
-        .insert_resource::<Msaa>(config.graphics.msaa.into())
         .insert_resource(ExactTime {
             tick_rate: config.matchmaking.tick_rate().into(),
             tick: 0,
             seconds: 0,
         })
-        .insert_resource(config)
         .insert_resource(MatchConfiguration {
             room_id: "something_random".to_owned(),
             players: 1,
@@ -97,12 +101,22 @@ fn main() {
         .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
         .insert_resource(SpacialAudio { max_distance: 25. })
+        .insert_resource::<Msaa>(config.graphics.msaa.into())
         .add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
                         title: "Muskrats at Dawn".to_owned(),
-                        mode: WindowMode::Windowed,
+                        mode: config.graphics.mode,
+                        present_mode: if config.graphics.vsync {
+                            PresentMode::AutoVsync
+                        } else {
+                            PresentMode::AutoNoVsync
+                        },
+                        resolution: WindowResolution::new(
+                            config.graphics.width as f32,
+                            config.graphics.height as f32,
+                        ),
                         ..default()
                     }),
                     ..default()
@@ -110,6 +124,7 @@ fn main() {
                 .build()
                 .add_before::<bevy::asset::AssetPlugin, _>(EmbeddedAssetPlugin),
         )
+        .insert_resource(config)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugin(AudioPlugin)
         .add_plugin(MainMenuPlugin)
@@ -163,7 +178,7 @@ fn load_level(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut rip: ResMut<RollbackIdProvider>,
+    //    mut rip: ResMut<bevy_ggrs::RollbackIdProvider>,
     assets: Res<AssetServer>,
 ) {
     // Create a directional light for the environment
@@ -317,7 +332,7 @@ fn check_for_bullet_collisions(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    impact_effect: Res<BulletImpactEffect>,
+    impact_effect: Res<SparksEffect>,
     smoke_effect: Res<SmokeCloudEffect>,
 ) {
     for fired_event in fired_events.iter() {

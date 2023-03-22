@@ -5,7 +5,7 @@ use bevy::{
         AnimationClip, AnimationPlayer, Bundle, Children, Commands, Component, Entity, EventReader,
         EventWriter, Handle, HierarchyQueryExt, Plugin, Query, Res, Scene, With, Without,
     },
-    time::Time,
+    time::Time, reflect::Reflect,
 };
 use bevy_kira_audio::prelude::{Audio, AudioControl, AudioEmitter, AudioSource};
 
@@ -38,7 +38,7 @@ pub struct FirearmAction {
     pub cooldown: f32,
 }
 
-#[derive(Component)]
+#[derive(Component, Reflect, Default)]
 pub struct FirearmLastFired {
     pub elapsed_time_seconds: f32,
 }

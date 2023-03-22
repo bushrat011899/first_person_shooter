@@ -3,10 +3,6 @@ use bevy_ggrs::Session;
 use ggrs::{Config, PlayerHandle, SessionBuilder};
 use matchbox_socket::{PeerId, PeerState, WebRtcSocket};
 
-mod input;
-
-pub use input::*;
-
 use crate::AppState;
 
 #[derive(Resource)]
@@ -22,12 +18,16 @@ pub struct SocketResource(Option<WebRtcSocket>);
 pub struct GGRSConfig;
 
 impl Config for GGRSConfig {
-    type Input = PlayerInput;
+    type Input = crate::input::PlayerInput;
     type State = u8;
     type Address = PeerId;
 }
 
-pub fn start_matchbox_socket(mut commands: Commands, config: Res<MatchConfiguration>, game_settings: Res<crate::config::Config>) {
+pub fn start_matchbox_socket(
+    mut commands: Commands,
+    config: Res<MatchConfiguration>,
+    game_settings: Res<crate::config::Config>,
+) {
     let room_url = format!("{}/{}", game_settings.matchmaking.server, config.room_id);
 
     info!("connecting to matchbox server: {:?}", room_url);
@@ -41,9 +41,7 @@ pub fn start_matchbox_socket(mut commands: Commands, config: Res<MatchConfigurat
     commands.insert_resource(SocketResource(Some(socket)));
 }
 
-pub fn watch_for_connected_peers(
-    mut socket: ResMut<SocketResource>,
-) {
+pub fn watch_for_connected_peers(mut socket: ResMut<SocketResource>) {
     // regularly call update_peers to update the list of connected peers
     for (peer, new_state) in socket.0.as_mut().unwrap().update_peers() {
         // you can also handle the specific dis(connections) as they occur:

@@ -1,20 +1,20 @@
 use bevy::prelude::Resource;
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::{
     fs::File,
     io::{BufReader, BufWriter},
 };
-use serde_json;
 
 mod controls;
 mod graphics;
-mod matchmaking;
 mod logging;
+mod matchmaking;
 
 pub use controls::*;
 pub use graphics::*;
-pub use matchmaking::*;
 pub use logging::*;
+pub use matchmaking::*;
 
 #[derive(Serialize, Deserialize, Default, Resource)]
 pub struct Config {
@@ -41,7 +41,7 @@ impl Config {
 
     pub fn try_save(&self) -> Result<(), &'static str> {
         log::trace!("Saving Settings to '{}'", Self::FILE_NAME);
-        
+
         let file = File::create(Self::FILE_NAME).map_err(|_| "Cannot Create Settings File")?;
 
         let buf_writer = BufWriter::new(file);

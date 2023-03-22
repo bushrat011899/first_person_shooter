@@ -1,7 +1,23 @@
 use bevy::prelude::{KeyCode, MouseButton};
 use serde::{Deserialize, Serialize};
+use enum_iterator::Sequence;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Copy, Sequence, Debug)]
+pub enum UserAction {
+    MoveForward,
+    MoveBackward,
+    MoveLeft,
+    MoveRight,
+    Jump,
+    Crouch,
+    Sprint,
+    Ram,
+    Pour,
+    Load,
+    Fire,
+}
+
+#[derive(Serialize, Deserialize, PartialEq)]
 pub enum UserInput {
     Keyboard(KeyCode),
     Mouse(MouseButton),
@@ -48,6 +64,25 @@ impl Default for ControlBindings {
             pour: KeyCode::F.into(),
             load: KeyCode::V.into(),
             fire: MouseButton::Left.into(),
+        }
+    }
+}
+
+impl ControlBindings {
+    /// Returns a `UserInput` bindings in the provided `UserAction`.
+    pub fn input_for<'a>(&'a self, action: UserAction) -> &'a UserInput {
+        match action {
+            UserAction::MoveForward => &self.forward,
+            UserAction::MoveBackward => &self.backward,
+            UserAction::MoveLeft => &self.left,
+            UserAction::MoveRight => &self.right,
+            UserAction::Jump => &self.crouch,
+            UserAction::Crouch => &self.sprint,
+            UserAction::Sprint => &self.jump,
+            UserAction::Ram => &self.ram,
+            UserAction::Pour => &self.pour,
+            UserAction::Load => &self.load,
+            UserAction::Fire => &self.fire,
         }
     }
 }
