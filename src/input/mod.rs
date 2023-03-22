@@ -19,13 +19,19 @@ pub struct PlayerInput {
     pub pointer: PointerInput,
 }
 
+#[derive(Resource)]
+pub struct LocalPlayerHandle(pub PlayerHandle);
+
 pub fn capture_and_encode_user_input(
-    _handle: In<PlayerHandle>,
+    handle: In<PlayerHandle>,
     keyboard_input: Res<Input<KeyCode>>,
     mouse_input: Res<Input<MouseButton>>,
     mut mouse_events: EventReader<MouseMotion>,
+    mut local_player: ResMut<LocalPlayerHandle>,
     config: Res<crate::config::Config>,
 ) -> PlayerInput {
+    local_player.0 = handle.0;
+
     let mut input = PlayerInput::default();
 
     for action in all::<UserAction>() {

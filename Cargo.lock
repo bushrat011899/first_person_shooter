@@ -829,15 +829,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_fps_controller"
-version = "0.2.0-dev"
-source = "git+https://github.com/bushrat011899/bevy_fps_controller#a5c49d0e0706bb824a2b15235153807124c4dc28"
-dependencies = [
- "bevy",
- "bevy_rapier3d",
-]
-
-[[package]]
 name = "bevy_ggrs"
 version = "0.11.0"
 source = "git+https://github.com/johanhelsing/bevy_ggrs?branch=bevy-0.10#cc959b8c538425346769ba7d6dbcbc933b80a673"
@@ -2371,7 +2362,6 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_embedded_assets",
- "bevy_fps_controller",
  "bevy_ggrs",
  "bevy_hanabi",
  "bevy_kira_audio",

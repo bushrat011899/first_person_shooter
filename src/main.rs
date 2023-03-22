@@ -1,3 +1,5 @@
+use config::UserAction;
+use input::LocalPlayerHandle;
 use non_linear_time::{track_exact_time, ExactTime};
 use simple_logger::SimpleLogger;
 
@@ -10,7 +12,6 @@ use bevy::{
 };
 
 use bevy_embedded_assets::EmbeddedAssetPlugin;
-use bevy_fps_controller::controller::*;
 use bevy_ggrs::{GGRSPlugin, PlayerInputs};
 use bevy_hanabi::prelude::*;
 use bevy_kira_audio::prelude::*;
@@ -20,6 +21,7 @@ use firearm::{FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, Firear
 use main_menu::MainMenuPlugin;
 use multiplayer::{GGRSConfig, MatchConfiguration};
 use particles::{setup_smoke_particles, setup_sparks_particles, SmokeCloudEffect, SparksEffect};
+use controller::*;
 
 mod config;
 mod firearm;
@@ -30,6 +32,7 @@ mod multiplayer;
 mod non_linear_time;
 mod particles;
 mod player;
+mod controller;
 
 const SPAWN_POINT: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 
@@ -42,9 +45,14 @@ pub enum AppState {
 
 pub fn log_user_inputs(
     inputs: Res<PlayerInputs<GGRSConfig>>,
+    local_player: Res<LocalPlayerHandle>,
 ) {
     for (player, (input, status)) in inputs.iter().enumerate() {
-        info!("Player {} sent: {:?} with status {:?}", player, input, status);
+        //info!("Player {} sent: {:?} with status {:?}", player, input, status);
+        if input.buttons.get(UserAction::Fire) {
+            let tag = if local_player.0 == player { "Local" } else { "Remote" };
+            info!("[{tag}] Player {player} Fired!");
+        }
     }
 }
 
@@ -85,6 +93,7 @@ fn main() {
 
     // Configure the Rest of the Application
     app.add_state::<AppState>()
+        .insert_resource(LocalPlayerHandle(0))
         .insert_resource(ExactTime {
             tick_rate: config.matchmaking.tick_rate().into(),
             tick: 0,
@@ -92,7 +101,7 @@ fn main() {
         })
         .insert_resource(MatchConfiguration {
             room_id: "something_random".to_owned(),
-            players: 1,
+            players: 2,
         })
         .insert_resource(AmbientLight {
             color: Color::WHITE,
@@ -129,8 +138,24 @@ fn main() {
         .add_plugin(AudioPlugin)
         .add_plugin(MainMenuPlugin)
         .add_plugin(HanabiPlugin)
-        .add_plugin(FpsControllerPlugin)
         .add_plugin(FirearmPlugin)
+        .add_systems(
+            (keyboard_and_mouse_input, choose_movement_mode)
+                .chain()
+                .in_set(FpsControllerSet::Input),
+        )
+        .add_systems(
+            (
+                map_input_orientation,
+                map_input_movement,
+                map_camera_transform,
+            )
+                .chain()
+                .in_set(FpsControllerSet::Update),
+        )
+        .configure_set(
+            FpsControllerSet::Input.before(FpsControllerSet::Update),
+        )
         .add_systems(
             (
                 multiplayer::start_matchbox_socket,

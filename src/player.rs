@@ -1,8 +1,9 @@
 use bevy::prelude::*;
-use bevy_fps_controller::controller::*;
 use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
 use std::f32::consts::*;
+
+use crate::controller::*;
 
 /*
     A player consists of hands, legs, a torso, and a head.
