@@ -1,6 +1,6 @@
 use bevy::{prelude::*, tasks::IoTaskPool};
 use bevy_ggrs::Session;
-use ggrs::{Config, PlayerHandle, SessionBuilder};
+use ggrs::{Config, SessionBuilder};
 use matchbox_socket::{PeerId, PeerState, WebRtcSocket};
 
 use crate::AppState;

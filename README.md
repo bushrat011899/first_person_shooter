@@ -40,3 +40,25 @@ A bullet can either be shot, garbage, or a slug depending on the caliber of the 
  4. The game should commence when all players agree to start playing.
  5. A player can disconnect from an active game, but new players cannot join, and disconnected players cannot reconnect.
  6. Once the game is concluded, connected players should be returned to a lobby together to plan the commencement of a new game.
+
+# Mitigating De-Sync
+
+Because I want to use Rapier for physics, there is a possiblity that each player will go out-of-sync with each other over time due to floating point precision, and Rapier (by default) using delta-time from Bevy rather than GGRS. I see several ways to mitigate this:
+
+ 1. Share player information with their inputs for comparison and resolution.
+   * Add full transform and velocity information (~ 12+16 + 12+12 bytes)
+      * Could be reduced by using `bf16` instead of `f32`, and by encoding information (e.g., quaternion -> euler, drop angular velocity, etc.)
+      * Instead of sending all information every frame, send information in a cycle. This would reduce the required size significatly, at the cost of reduced temporal resolution:
+         * Translation
+         * Rotation
+         * Velocity
+         * Angular Velocity
+ 2. More tightly couple Rapier to GGRS to keep all peers in lockstep.
+ 3. Don't use Rapier and replace it with something more deterministic.
+ 4. Modify gameplay to minimise the variability introduced by Rapier:
+   * Reduce movement speed and acceleration.
+   * Reduce "bounciness" of collisions.
+   * Create "resets" which naturally put players in known states:
+      * Corridoors with loops
+      * Interactables/colliders that notify over the network
+      * Respawns

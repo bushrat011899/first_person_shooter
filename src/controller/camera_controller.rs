@@ -34,7 +34,7 @@ pub fn map_camera_transform(
 
         let camera_yaw = match input.free_look {
             FreeLookState::Not => camera_yaw,
-            FreeLookState::Starting | FreeLookState::Looking => (input.yaw - controller.yaw),
+            FreeLookState::Starting | FreeLookState::Looking => input.yaw - controller.yaw,
             FreeLookState::Stopping => 0.0,
         };
 

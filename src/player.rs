@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
 use std::f32::consts::*;
 
@@ -82,7 +81,7 @@ pub fn spawn_player(commands: &mut Commands, player_id: usize) -> PlayerEntity {
         .push_children(&[player.head, player.feet])
         .insert((
             OwningPlayer(player_id),
-            Collider::capsule(Vec3::Y * 0.5, Vec3::Y * 1.5, 0.5),
+            Collider::capsule(Vec3::ZERO, Vec3::Y * 2.0, 0.5),
             Friction {
                 coefficient: 0.0,
                 combine_rule: CoefficientCombineRule::Min,
@@ -102,7 +101,7 @@ pub fn spawn_player(commands: &mut Commands, player_id: usize) -> PlayerEntity {
             FpsControllerBundle::default(),
             TransformBundle::from_transform(Transform::from_translation(Vec3 {
                 x: 0.0 + 3.0 * player_id as f32,
-                y: 1.0,
+                y: 3.0,
                 z: 0.0,
             })),
             VisibilityBundle::default(),

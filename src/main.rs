@@ -1,6 +1,6 @@
 use config::UserAction;
 use ggrs::InputStatus;
-use input::LocalPlayerHandle;
+use input::{LocalPlayerHandle, ResyncInput};
 use non_linear_time::{track_exact_time, ExactTime};
 use player::{Head, OwningPlayer};
 use simple_logger::SimpleLogger;
@@ -14,7 +14,7 @@ use bevy::{
 };
 
 use bevy_embedded_assets::EmbeddedAssetPlugin;
-use bevy_ggrs::{GGRSPlugin, PlayerInputs};
+use bevy_ggrs::{GGRSPlugin, PlayerInputs, Rollback};
 use bevy_hanabi::prelude::*;
 use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -69,7 +69,9 @@ fn main() {
         // define system that returns inputs given a player handle, so GGRS can send the inputs around
         .with_input_system(input::capture_and_encode_user_input)
         // register types of components AND resources you want to be rolled back
+        .register_rollback_component::<GlobalTransform>()
         .register_rollback_component::<Transform>()
+        .register_rollback_component::<Velocity>()
         .register_rollback_resource::<ExactTime>()
         // these systems will be executed as part of the advance frame update
         .with_rollback_schedule({
@@ -89,6 +91,7 @@ fn main() {
                 )
                 .add_systems(
                     (
+                        resync_externally_owned_entities,
                         input_handler,
                         firearm::process_firearm_fire_requests,
                         firearm::play_fire_soundeffects,
@@ -132,7 +135,7 @@ fn main() {
         })
         .insert_resource(MatchConfiguration {
             room_id: "something_random".to_owned(),
-            players: 3,
+            players: 2,
         })
         .insert_resource(AmbientLight {
             color: Color::WHITE,
@@ -193,6 +196,36 @@ fn main() {
                 .in_schedule(OnEnter(AppState::InGame)),
         )
         .run();
+}
+
+fn resync_externally_owned_entities(
+    inputs: Res<PlayerInputs<GGRSConfig>>,
+    local_player: Res<LocalPlayerHandle>,
+    mut torsos: Query<(&mut Transform, &mut Velocity, &OwningPlayer), (With<player::Torso>, With<Rollback>)>
+) {
+    for (mut transform, mut velocity, OwningPlayer(player)) in torsos.iter_mut() {
+        if local_player.0 == *player {
+            continue;
+        }
+
+        let Some((input, status)) = inputs.get(*player) else {
+            continue;
+        };
+
+        if let InputStatus::Disconnected = status {
+            continue;
+        };
+
+        let resync: ResyncInput = input.resync.into();
+
+        match resync {
+            ResyncInput::Translation { x, y, z } => transform.translation = Vec3 { x, y, z },
+            ResyncInput::Rotation { yaw, pitch, roll } => transform.rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch, roll),
+            ResyncInput::Velocity { x, y, z } => velocity.linvel = Vec3 { x, y, z },
+            ResyncInput::AngularVelocity { yaw, pitch, roll } => velocity.angvel = Vec3 { x: yaw, y: pitch, z: roll },
+            ResyncInput::BadData => {},
+        }
+    }
 }
 
 fn activate_spatial_audio_when_applicable(

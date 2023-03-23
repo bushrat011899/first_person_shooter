@@ -2,6 +2,22 @@ use bevy::prelude::{KeyCode, MouseButton};
 use enum_iterator::Sequence;
 use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize)]
+pub struct ControlBindings {
+    pub forward: UserInput,
+    pub backward: UserInput,
+    pub left: UserInput,
+    pub right: UserInput,
+    pub jump: UserInput,
+    pub crouch: UserInput,
+    pub sprint: UserInput,
+    pub ram: UserInput,
+    pub pour: UserInput,
+    pub load: UserInput,
+    pub fire: UserInput,
+    pub pointer_sensitivity: f32,
+}
+
 #[derive(Clone, Copy, Sequence, Debug)]
 pub enum UserAction {
     MoveForward,
@@ -33,22 +49,6 @@ impl From<MouseButton> for UserInput {
     fn from(value: MouseButton) -> Self {
         Self::Mouse(value)
     }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct ControlBindings {
-    pub forward: UserInput,
-    pub backward: UserInput,
-    pub left: UserInput,
-    pub right: UserInput,
-    pub jump: UserInput,
-    pub crouch: UserInput,
-    pub sprint: UserInput,
-    pub ram: UserInput,
-    pub pour: UserInput,
-    pub load: UserInput,
-    pub fire: UserInput,
-    pub pointer_sensitivity: f32,
 }
 
 impl Default for ControlBindings {
