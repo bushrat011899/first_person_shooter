@@ -1,14 +1,20 @@
+use std::num::NonZeroUsize;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct MatchMakingSettings {
     pub server: String,
+    pub room: String,
+    pub players: NonZeroUsize,
 }
 
 impl Default for MatchMakingSettings {
     fn default() -> Self {
         Self {
-            server: "ws://localhost:3536".to_owned(),
+            server: "wss://matchbox-muskrats.fly.dev:443".to_owned(),
+            room: "default_room".to_owned(),
+            players: NonZeroUsize::new(4).unwrap(),
         }
     }
 }

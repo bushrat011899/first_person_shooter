@@ -9,7 +9,7 @@ pub use buttons::*;
 pub use pointer::*;
 pub use resync::*;
 
-use crate::{config::UserAction, player::OwningPlayer};
+use crate::{config::UserAction, player::OwningPlayer, controller::FpsControllerInput};
 
 mod buttons;
 mod pointer;
@@ -33,14 +33,14 @@ pub fn capture_and_encode_user_input(
     mut mouse_events: EventReader<MouseMotion>,
     mut local_player: ResMut<LocalPlayerHandle>,
     config: Res<crate::config::Config>,
-    torsos: Query<(&Transform, &Velocity, &OwningPlayer), With<crate::player::Torso>>,
+    torsos: Query<(&Transform, &Velocity, &FpsControllerInput, &OwningPlayer), With<crate::player::Torso>>,
     mut sync_target: Local<u8>,
 ) -> PlayerInput {
     local_player.0 = handle.0;
 
     let mut input = PlayerInput::default();
 
-    for (transform, velocity, OwningPlayer(player)) in torsos.iter() {
+    for (transform, velocity, controller, OwningPlayer(player)) in torsos.iter() {
         if *player != local_player.0 {
             continue;
         }
@@ -52,8 +52,7 @@ pub fn capture_and_encode_user_input(
                 ResyncInput::Translation { x, y, z }
             },
             1 => {
-                let (yaw, pitch, roll) = transform.rotation.to_euler(EulerRot::YXZ);
-                ResyncInput::Rotation { yaw, pitch, roll }
+                ResyncInput::Rotation { yaw: controller.yaw, pitch: controller.pitch, roll: 0.0 }
             },
             2 => {
                 let Vec3 { x, y, z } = velocity.linvel;

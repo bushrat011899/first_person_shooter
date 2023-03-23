@@ -91,6 +91,7 @@ fn main() {
                 )
                 .add_systems(
                     (
+                        ensure_all_players_are_spawned,
                         resync_externally_owned_entities,
                         input_handler,
                         firearm::process_firearm_fire_requests,
@@ -134,8 +135,8 @@ fn main() {
             seconds: 0,
         })
         .insert_resource(MatchConfiguration {
-            room_id: "something_random".to_owned(),
-            players: 2,
+            room_id: config.matchmaking.room.clone(),
+            players: config.matchmaking.players.into(),
         })
         .insert_resource(AmbientLight {
             color: Color::WHITE,
@@ -190,7 +191,6 @@ fn main() {
         .add_systems(
             (
                 load_level,
-                spawn_players,
                 add_audio_listener_to_head_of_local_player,
             )
                 .in_schedule(OnEnter(AppState::InGame)),
@@ -201,9 +201,9 @@ fn main() {
 fn resync_externally_owned_entities(
     inputs: Res<PlayerInputs<GGRSConfig>>,
     local_player: Res<LocalPlayerHandle>,
-    mut torsos: Query<(&mut Transform, &mut Velocity, &OwningPlayer), (With<player::Torso>, With<Rollback>)>
+    mut torsos: Query<(&mut Transform, &mut Velocity, &mut FpsControllerInput, &OwningPlayer), (With<player::Torso>, With<Rollback>)>
 ) {
-    for (mut transform, mut velocity, OwningPlayer(player)) in torsos.iter_mut() {
+    for (mut transform, mut velocity, mut controller, OwningPlayer(player)) in torsos.iter_mut() {
         if local_player.0 == *player {
             continue;
         }
@@ -220,7 +220,10 @@ fn resync_externally_owned_entities(
 
         match resync {
             ResyncInput::Translation { x, y, z } => transform.translation = Vec3 { x, y, z },
-            ResyncInput::Rotation { yaw, pitch, roll } => transform.rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch, roll),
+            ResyncInput::Rotation { yaw, pitch, .. } => {
+                controller.yaw = yaw;
+                controller.pitch = pitch;
+            },
             ResyncInput::Velocity { x, y, z } => velocity.linvel = Vec3 { x, y, z },
             ResyncInput::AngularVelocity { yaw, pitch, roll } => velocity.angvel = Vec3 { x: yaw, y: pitch, z: roll },
             ResyncInput::BadData => {},
@@ -265,64 +268,75 @@ fn add_audio_listener_to_head_of_local_player(
     }
 }
 
-fn spawn_players(
+fn ensure_all_players_are_spawned(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut rip: ResMut<bevy_ggrs::RollbackIdProvider>,
     assets: Res<AssetServer>,
-    match_settings: Res<MatchConfiguration>,
+    inputs: Res<PlayerInputs<GGRSConfig>>,
+    torsos: Query<&OwningPlayer, (With<player::Torso>, With<Rollback>)>
 ) {
-    for player_id in 0..match_settings.players {
-        // Spawn the player
-        let player_entities = player::spawn_player(&mut commands, player_id);
+    for (player_handle, (_input, status)) in inputs.iter().enumerate() {
+        if let InputStatus::Disconnected = status {
+            continue;
+        };
 
-        let player_handle = meshes.add(Mesh::from(shape::Capsule {
-            radius: 0.5,
-            rings: 8,
-            depth: 1.0,
-            latitudes: 8,
-            longitudes: 8,
-            uv_profile: default(),
-        }));
-        let player_material_handle = materials.add(StandardMaterial {
-            base_color: Color::rgb(0.3, 0.8, 0.3),
-            ..default()
-        });
+        let already_spawned = torsos
+            .iter()
+            .any(|OwningPlayer(spawned_player_handle)| *spawned_player_handle == player_handle);
 
-        commands.entity(player_entities.head).insert((
-            FogSettings {
-                color: Color::rgba(0.1, 0.1, 0.1, 1.0),
-                falloff: FogFalloff::Exponential { density: 0.1 },
+        if !already_spawned {
+            // Spawn the player
+            let player_entities = player::spawn_player(&mut commands, player_handle);
+
+            let player_handle = meshes.add(Mesh::from(shape::Capsule {
+                radius: 0.5,
+                rings: 8,
+                depth: 1.0,
+                latitudes: 8,
+                longitudes: 8,
+                uv_profile: default(),
+            }));
+            let player_material_handle = materials.add(StandardMaterial {
+                base_color: Color::rgb(0.3, 0.8, 0.3),
                 ..default()
-            },
-            rip.next(),
-        ));
+            });
 
-        commands
-            .entity(player_entities.torso)
-            .insert((player_handle, player_material_handle));
-
-        commands.entity(player_entities.right_hand).insert((
-            FirearmBundle {
-                model: assets.load("musket.glb#Scene0"),
-                actions: FirearmActions {
-                    fire: FirearmAction {
-                        animation: assets.load("musket.glb#Animation0"),
-                        sound: assets.load("gun_shot.ogg"),
-                        cooldown: 1.0,
-                    },
+            commands.entity(player_entities.head).insert((
+                FogSettings {
+                    color: Color::rgba(0.1, 0.1, 0.1, 1.0),
+                    falloff: FogFalloff::Exponential { density: 0.1 },
+                    ..default()
                 },
-                audio_emitter: AudioEmitter { instances: vec![] },
-            },
-            rip.next(),
-        ));
+                rip.next(),
+            ));
 
-        commands.entity(player_entities.feet).insert(rip.next());
-        commands
-            .entity(player_entities.left_hand)
-            .insert(rip.next());
-        commands.entity(player_entities.torso).insert(rip.next());
+            commands
+                .entity(player_entities.torso)
+                .insert((player_handle, player_material_handle));
+
+            commands.entity(player_entities.right_hand).insert((
+                FirearmBundle {
+                    model: assets.load("musket.glb#Scene0"),
+                    actions: FirearmActions {
+                        fire: FirearmAction {
+                            animation: assets.load("musket.glb#Animation0"),
+                            sound: assets.load("gun_shot.ogg"),
+                            cooldown: 1.0,
+                        },
+                    },
+                    audio_emitter: AudioEmitter { instances: vec![] },
+                },
+                rip.next(),
+            ));
+
+            commands.entity(player_entities.feet).insert(rip.next());
+            commands
+                .entity(player_entities.left_hand)
+                .insert(rip.next());
+            commands.entity(player_entities.torso).insert(rip.next());
+        }
     }
 }
 
