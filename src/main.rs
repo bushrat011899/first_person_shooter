@@ -444,8 +444,6 @@ fn check_for_bullet_collisions(
     heads: Query<&GlobalTransform, With<player::Head>>,
     rapier_context: Res<RapierContext>,
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     impact_effect: Res<SparksEffect>,
     smoke_effect: Res<SmokeCloudEffect>,
 ) {
@@ -479,28 +477,11 @@ fn check_for_bullet_collisions(
         let hit_point = ray_pos + ray_dir * toi;
         println!("Entity {:?} hit at point {}", entity, hit_point);
 
-        // Spawn sphere to represent the hit point
-        let hit_handle = meshes.add(Mesh::from(shape::UVSphere {
-            radius: 0.01,
-            sectors: 4,
-            stacks: 4,
-        }));
-
-        let hit_material_handle = materials.add(StandardMaterial {
-            base_color: Color::rgb(0.1, 0.1, 0.1),
+        commands.spawn(ParticleEffectBundle {
+            effect: ParticleEffect::new(impact_effect.effect.clone_weak()),
+            transform: Transform::from_translation(hit_point),
             ..default()
         });
-
-        commands.spawn((
-            PbrBundle {
-                mesh: hit_handle.clone(),
-                material: hit_material_handle.clone(),
-                transform: Transform::from_translation(hit_point),
-                ..default()
-            },
-            Collider::ball(0.01),
-            ParticleEffect::new(impact_effect.effect.clone_weak()),
-        ));
     }
 }
 

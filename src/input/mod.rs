@@ -34,6 +34,7 @@ pub fn capture_and_encode_user_input(
     mut local_player: ResMut<LocalPlayerHandle>,
     config: Res<crate::config::Config>,
     torsos: Query<(&Transform, &Velocity, &OwningPlayer), With<crate::player::Torso>>,
+    mut sync_target: Local<u8>,
 ) -> PlayerInput {
     local_player.0 = handle.0;
 
@@ -45,8 +46,30 @@ pub fn capture_and_encode_user_input(
         }
 
         // TODO: Rotate between sending translation, rotation, etc.
-        input.resync = ResyncInput::Translation { x: transform.translation.x, y: transform.translation.y, z: transform.translation.z }.into();
+        let resync = match *sync_target {
+            0 => {
+                let Vec3 { x, y, z } = transform.translation;
+                ResyncInput::Translation { x, y, z }
+            },
+            1 => {
+                let (yaw, pitch, roll) = transform.rotation.to_euler(EulerRot::YXZ);
+                ResyncInput::Rotation { yaw, pitch, roll }
+            },
+            2 => {
+                let Vec3 { x, y, z } = velocity.linvel;
+                ResyncInput::Velocity { x, y, z }
+            },
+            3 => {
+                let Vec3 { x, y, z } = velocity.angvel;
+                ResyncInput::AngularVelocity { yaw: x, pitch: y, roll: z }
+            },
+            _ => continue
+        };
+
+        input.resync = resync.into();
     }
+
+    *sync_target = (*sync_target + 1) % 4;
 
     for action in all::<UserAction>() {
         let pressed = match config.controls.input_for(action) {
