@@ -8,7 +8,6 @@ use simple_logger::SimpleLogger;
 use bevy::{
     gltf::Gltf,
     gltf::{GltfMesh, GltfNode},
-    math::Vec3Swizzles,
     prelude::*,
     window::{CursorGrabMode, PresentMode, WindowResolution},
 };
@@ -20,10 +19,10 @@ use bevy_kira_audio::prelude::*;
 use bevy_rapier3d::prelude::*;
 
 use controller::*;
-use firearm::{FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, Fired};
+use firearm::{FirearmAction, FirearmActions, FirearmBundle, FirearmEvent, Fired, FirearmState};
 use main_menu::MainMenuPlugin;
 use multiplayer::{GGRSConfig, MatchConfiguration};
-use particles::{setup_smoke_particles, setup_sparks_particles, SmokeCloudEffect, SparksEffect};
+use particles::{setup_smoke_particles, setup_sparks_particles, SmokeCloudEffect, SparksEffect, BloodEffect, setup_blood_particles};
 
 mod config;
 mod controller;
@@ -72,6 +71,7 @@ fn main() {
         .register_rollback_component::<GlobalTransform>()
         .register_rollback_component::<Transform>()
         .register_rollback_component::<Velocity>()
+        .register_rollback_component::<FirearmState>()
         .register_rollback_resource::<ExactTime>()
         // these systems will be executed as part of the advance frame update
         .with_rollback_schedule({
@@ -101,7 +101,7 @@ fn main() {
                         fog::increase_fog_after_shots,
                         manage_cursor,
                         scene_colliders,
-                        display_text,
+                        //display_text,
                         respawn,
                         check_for_bullet_collisions,
                         activate_camera_of_local_player,
@@ -140,7 +140,7 @@ fn main() {
         })
         .insert_resource(AmbientLight {
             color: Color::WHITE,
-            brightness: 0.5,
+            brightness: 0.1,
         })
         .insert_resource(ClearColor(Color::hex("D4F5F5").unwrap()))
         .insert_resource(RapierConfiguration::default())
@@ -178,6 +178,7 @@ fn main() {
                 multiplayer::start_matchbox_socket,
                 setup_sparks_particles,
                 setup_smoke_particles,
+                setup_blood_particles,
             )
                 .on_startup(),
         )
@@ -327,6 +328,7 @@ fn ensure_all_players_are_spawned(
                         },
                     },
                     audio_emitter: AudioEmitter { instances: vec![] },
+                    state: default(),
                 },
                 rip.next(),
             ));
@@ -357,27 +359,6 @@ fn load_level(mut commands: Commands, assets: Res<AssetServer>) {
         handle: assets.load("playground.glb"),
         is_loaded: false,
     });
-
-    // Debug UI
-    commands.spawn(
-        TextBundle::from_section(
-            "",
-            TextStyle {
-                font: assets.load("fira_mono.ttf"),
-                font_size: 24.0,
-                color: Color::BLACK,
-            },
-        )
-        .with_style(Style {
-            position_type: PositionType::Absolute,
-            position: UiRect {
-                top: Val::Px(5.0),
-                left: Val::Px(5.0),
-                ..default()
-            },
-            ..default()
-        }),
-    );
 }
 
 fn respawn(mut query: Query<(&mut Transform, &mut Velocity)>) {
@@ -395,36 +376,6 @@ fn respawn(mut query: Query<(&mut Transform, &mut Velocity)>) {
 struct MainScene {
     handle: Handle<Gltf>,
     is_loaded: bool,
-}
-
-#[derive(Resource)]
-struct SimplePerformance {
-    frames: f32,
-    delta_time: f32,
-    frame_time: f32,
-}
-
-impl Default for SimplePerformance {
-    fn default() -> Self {
-        Self {
-            frames: 0.0,
-            delta_time: 0.0,
-            frame_time: f32::INFINITY,
-        }
-    }
-}
-
-impl SimplePerformance {
-    fn update(&mut self, delta_time: f32) {
-        self.frames += 1.0;
-        self.delta_time += delta_time;
-
-        if self.delta_time > 1.0 && self.frames > 0.0 {
-            self.frame_time = self.delta_time / self.frames;
-            self.frames = 0.0;
-            self.delta_time = 0.0;
-        }
-    }
 }
 
 fn input_handler(
@@ -456,10 +407,12 @@ fn check_for_bullet_collisions(
     mut fired_events: EventReader<FirearmEvent<Fired>>,
     hands: Query<&Parent, With<player::RightHand>>,
     heads: Query<&GlobalTransform, With<player::Head>>,
+    players: Query<Entity, With<OwningPlayer>>,
     rapier_context: Res<RapierContext>,
     mut commands: Commands,
     impact_effect: Res<SparksEffect>,
     smoke_effect: Res<SmokeCloudEffect>,
+    blood_effect: Res<BloodEffect>,
 ) {
     for fired_event in fired_events.iter() {
         let Ok(parent) = hands.get(fired_event.entity) else {
@@ -496,13 +449,25 @@ fn check_for_bullet_collisions(
         };
 
         let hit_point = ray_pos + ray_dir * toi;
-        println!("Entity {:?} hit at point {}", entity, hit_point);
 
-        commands.spawn(ParticleEffectBundle {
-            effect: ParticleEffect::new(impact_effect.effect.clone_weak()),
-            transform: Transform::from_translation(hit_point),
-            ..default()
-        });
+
+        
+
+        if players.get(entity).is_ok() {
+            println!("Hit Player {:?} at point {}", entity, hit_point);
+            commands.spawn(ParticleEffectBundle {
+                effect: ParticleEffect::new(blood_effect.effect.clone_weak()),
+                transform: Transform::from_translation(hit_point),
+                ..default()
+            });
+        } else {
+            println!("Hit Entity {:?} at point {}", entity, hit_point);
+            commands.spawn(ParticleEffectBundle {
+                effect: ParticleEffect::new(impact_effect.effect.clone_weak()),
+                transform: Transform::from_translation(hit_point),
+                ..default()
+            });
+        }
     }
 }
 
@@ -558,36 +523,5 @@ fn manage_cursor(
     if key.just_pressed(KeyCode::Escape) {
         window.cursor.grab_mode = CursorGrabMode::None;
         window.cursor.visible = true;
-    }
-}
-
-fn display_text(
-    time: Res<Time>,
-    mut controller_query: Query<(&Transform, &Velocity)>,
-    mut text_query: Query<&mut Text>,
-    mut perf: Local<SimplePerformance>,
-) {
-    let dt = time.delta_seconds();
-
-    perf.update(dt);
-
-    let frame_time = perf.frame_time;
-    let fps = 1.0 / frame_time;
-
-    for (transform, velocity) in &mut controller_query {
-        for mut text in &mut text_query {
-            text.sections[0].value = format!(
-                "vel: {:.2}, {:.2}, {:.2}\npos: {:.2}, {:.2}, {:.2}\nspd: {:.2}\nspf: {:.3}\nfps: {:3.0}",
-                velocity.linvel.x,
-                velocity.linvel.y,
-                velocity.linvel.z,
-                transform.translation.x,
-                transform.translation.y,
-                transform.translation.z,
-                velocity.linvel.xz().length(),
-                frame_time,
-                fps
-            );
-        }
     }
 }

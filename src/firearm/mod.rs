@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use bevy::{
     prelude::{
-        AnimationClip, AnimationPlayer, Bundle, Children, Commands, Component, Entity, EventReader,
+        AnimationClip, AnimationPlayer, Bundle, Children, Component, Entity, EventReader,
         EventWriter, Handle, HierarchyQueryExt, Plugin, Query, Res, Scene, With, Without,
     },
     reflect::Reflect,
@@ -39,9 +39,17 @@ pub struct FirearmAction {
     pub cooldown: f32,
 }
 
-#[derive(Component, Reflect, Default)]
-pub struct FirearmLastFired {
-    pub elapsed_time_seconds: f32,
+#[derive(Component, Reflect)]
+pub struct FirearmState {
+    pub last_fired_seconds: f32,
+}
+
+impl Default for FirearmState {
+    fn default() -> Self {
+        Self {
+            last_fired_seconds: f32::NEG_INFINITY
+        }
+    }
 }
 
 #[derive(Component)]
@@ -54,37 +62,28 @@ pub struct FirearmBundle {
     pub model: Handle<Scene>,
     pub actions: FirearmActions,
     pub audio_emitter: AudioEmitter,
+    pub state: FirearmState,
 }
 
 pub fn process_firearm_fire_requests(
-    mut commands: Commands,
     mut fire_events: EventReader<FirearmEvent<Fire>>,
     mut fired_events: EventWriter<FirearmEvent<Fired>>,
-    mut gun_query: Query<(&FirearmActions, Option<&mut FirearmLastFired>), With<FirearmActions>>,
+    mut gun_query: Query<(&FirearmActions, &mut FirearmState), With<FirearmActions>>,
     time: Res<Time>,
 ) {
     let current_time = time.elapsed_seconds();
 
     for fire_event in fire_events.iter() {
-        let Ok((actions, last_fired)) = gun_query.get_mut(fire_event.entity) else {
+        let Ok((actions, mut last_fired)) = gun_query.get_mut(fire_event.entity) else {
             continue;
         };
 
         // Check if the firearm is on cooldown
-        match last_fired {
-            Some(mut last_fired) => {
-                if current_time - last_fired.elapsed_time_seconds <= actions.fire.cooldown {
-                    continue;
-                }
+        if current_time - last_fired.last_fired_seconds <= actions.fire.cooldown {
+            continue;
+        }
 
-                last_fired.elapsed_time_seconds = current_time;
-            }
-            None => {
-                commands.entity(fire_event.entity).insert(FirearmLastFired {
-                    elapsed_time_seconds: current_time,
-                });
-            }
-        };
+        last_fired.last_fired_seconds = current_time;
 
         fired_events.send(FirearmEvent {
             details: Fired,

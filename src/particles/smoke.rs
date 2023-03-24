@@ -40,16 +40,16 @@ pub fn setup_smoke_particles(
             dimension: ShapeDimension::Volume,
         })
         .init(InitVelocitySphereModifier {
-            center: Vec3::ZERO,
-            speed: Value::Uniform((2., 10.)),
+            center: Vec3 { x: 0.0, y: -0.5, z: 0.0 },
+            speed: Value::Uniform((10., 30.)),
         })
         .init(InitLifetimeModifier {
-            lifetime: Value::Uniform((0.1, 4.0)),
+            lifetime: Value::Uniform((0.1, 10.0)),
         })
         .init(InitAgeModifier {
             age: Value::Uniform((0.0, 0.2)),
         })
-        .update(LinearDragModifier { drag: 5. })
+        .update(LinearDragModifier { drag: 10. })
         .update(AccelModifier::constant(Vec3::new(0., -1., 0.)))
         .render(ColorOverLifetimeModifier {
             gradient: color_gradient1,
