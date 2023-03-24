@@ -31,7 +31,7 @@ pub fn setup_smoke_particles(
         EffectAsset {
             name: "smoke".to_string(),
             capacity,
-            spawner: Spawner::once(batch_size.into(), true),
+            spawner: Spawner::new(batch_size.into(), 0.1.into(), f32::INFINITY.into()),
             ..Default::default()
         }
         .init(InitPositionSphereModifier {
@@ -56,7 +56,8 @@ pub fn setup_smoke_particles(
         })
         .render(SizeOverLifetimeModifier {
             gradient: size_gradient1,
-        }),
+        })
+        .render(BillboardModifier),
     );
 
     commands.insert_resource(SmokeCloudEffect { effect });

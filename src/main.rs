@@ -476,11 +476,18 @@ fn check_for_bullet_collisions(
         let solid = true;
         let filter = QueryFilter::new();
 
-        commands.spawn(ParticleEffectBundle {
-            effect: ParticleEffect::new(smoke_effect.effect.clone_weak()),
-            transform: Transform::from_translation(ray_pos),
-            ..default()
-        });
+        commands.spawn((
+            ParticleEffectBundle {
+                effect: ParticleEffect::new(smoke_effect.effect.clone_weak()),
+                transform: Transform::from_translation(ray_pos).looking_to(ray_dir, Vec3::Y),
+                ..default()
+            },
+            RigidBody::KinematicVelocityBased,
+            Velocity {
+                linvel: head.forward() * 100.,
+                ..default()
+            }
+        ));
 
         let Some((entity, toi)) = rapier_context.cast_ray(
             ray_pos, ray_dir, max_toi, solid, filter
