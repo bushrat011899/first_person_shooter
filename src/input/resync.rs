@@ -29,7 +29,7 @@ pub enum ResyncInput {
 
     AngularVelocity { yaw: f32, pitch: f32, roll: f32 },
 
-    // Fallback
+    /// Fallback
     BadData,
 }
 

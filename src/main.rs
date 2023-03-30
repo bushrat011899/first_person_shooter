@@ -101,7 +101,6 @@ fn main() {
                         fog::increase_fog_after_shots,
                         manage_cursor,
                         scene_colliders,
-                        //display_text,
                         respawn,
                         check_for_bullet_collisions,
                         activate_camera_of_local_player,
